@@ -20,11 +20,11 @@ BEGIN
     -- Setup core entities
     INSERT INTO currency_master (currency_code, currency_name) VALUES ('USD', 'US Dollar') ON CONFLICT DO NOTHING;
 
-    INSERT INTO market_master (tenant_id, market_code, market_name)
-    VALUES (v_tenant_1, 'MKT_1', 'Market 1') RETURNING id INTO v_market_t1;
+    INSERT INTO market_master (tenant_id, market_code, market_name, timezone, default_currency_code)
+    VALUES (v_tenant_1, 'MKT_1', 'Market 1', 'America/New_York', 'USD') RETURNING id INTO v_market_t1;
 
-    INSERT INTO market_master (tenant_id, market_code, market_name)
-    VALUES (v_tenant_2, 'MKT_2', 'Market 2') RETURNING id INTO v_market_t2;
+    INSERT INTO market_master (tenant_id, market_code, market_name, timezone, default_currency_code)
+    VALUES (v_tenant_2, 'MKT_2', 'Market 2', 'Europe/London', 'USD') RETURNING id INTO v_market_t2;
 
     INSERT INTO charge_specification (tenant_id, charge_code, charge_name, charge_priority, stacking_rule, calculation_type)
     VALUES (v_tenant_1, 'CHG_1', 'Charge 1', 1, 'ADDITIVE', 'FLAT') RETURNING id INTO v_charge_t1;

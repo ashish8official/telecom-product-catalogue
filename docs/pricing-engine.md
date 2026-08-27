@@ -13,8 +13,14 @@ Overrides are stored in `price_override` and never mutate the actual `offering_r
 
 ## 2. Effective Dating & Overlap Rules
 - **Effective Duration:** `effective_from <= effective_at AND (effective_to IS NULL OR effective_to > effective_at)`.
-- **Overlap Prevention:** A transactional trigger (`check_price_override_overlap`) ensures that within the exact same `(tenant_id, offering_rate_id, scope_type, scope_reference_id)`, no two overrides overlap in time. "Most recently created wins" is strictly prohibited.
+- **Date Range Integrity:** `CHECK (effective_to IS NULL OR effective_to > effective_from)` prevents inverted date ranges at the database level.
+- **Overlap Prevention:** Handled in the application service layer (`priceOverrideService.ts`) using transactional row-level locking (`SELECT ... FOR UPDATE` on the target `offering_rate`). The service queries for existing active overrides that would overlap and rejects the insert if any are found. This approach was chosen over a database trigger per the project architecture rule that business logic belongs in the service layer, not in database triggers.
+- **Deterministic Tie-Breaking:** If overlapping overrides somehow exist (e.g. inserted via direct SQL), `resolve_price()` uses `ORDER BY effective_from DESC LIMIT 1` to deterministically select the most recently effective override rather than returning an arbitrary result.
 
 ## 3. The `resolve_price` Function
 The database provides `resolve_price(tenant_id, offering_rate_id, subscriber_id, account_id, market_id, effective_at)`.
 It returns a composite `(amount NUMERIC(16,6), source VARCHAR)` showing both the computed numeric cost and how it was decided.
+
+## 4. Known Limitations
+- **priceType Mapping:** The internal `calculation_type` (`FLAT`/`PERCENTAGE`) does not contain sufficient information to map to TMF620 `priceType` (`recurring`/`oneTime`/`usage`). A `charge_period` field on `charge_specification` would be needed to distinguish recurring from one-time charges.
+- **Scalability:** The `GET /productOfferingPrice` list endpoint currently resolves every `offering_rate` in the tenant via `CROSS JOIN LATERAL resolve_price(...)`. Pagination must be added before production deployment.

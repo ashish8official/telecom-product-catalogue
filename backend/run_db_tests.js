@@ -15,7 +15,9 @@ async function run() {
         console.log("Connected to PostgreSQL");
         
         const files = [
-            '../database/migrations/015_price_override.up.sql',
+            '../database/migrations/016_price_hardening.up.sql',
+            '../database/tests/test_008_pricing.sql',
+            '../database/tests/test_012_tax.sql',
             '../database/tests/test_015_override.sql'
         ];
         
@@ -23,11 +25,12 @@ async function run() {
             console.log(`Running ${file}...`);
             const sql = fs.readFileSync(file, 'utf8');
             await client.query(sql);
-            console.log(`Successfully ran ${file}`);
+            console.log(`✅ Successfully ran ${file}`);
         }
         
     } catch (e) {
-        console.error("Error:", e);
+        console.error("❌ Error:", e.message);
+        process.exit(1);
     } finally {
         await client.end();
     }

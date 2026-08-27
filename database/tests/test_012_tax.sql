@@ -15,12 +15,15 @@ DECLARE
     
     v_tax_1_t2 UUID;
 BEGIN
-    -- Setup Markets
-    INSERT INTO market_master (tenant_id, market_code, market_name)
-    VALUES (v_tenant_1, 'MKT_1', 'Market 1') RETURNING id INTO v_market_t1;
+    -- Setup Currency (needed for market_master FK)
+    INSERT INTO currency_master (currency_code, currency_name) VALUES ('USD', 'US Dollar') ON CONFLICT DO NOTHING;
 
-    INSERT INTO market_master (tenant_id, market_code, market_name)
-    VALUES (v_tenant_2, 'MKT_2', 'Market 2') RETURNING id INTO v_market_t2;
+    -- Setup Markets
+    INSERT INTO market_master (tenant_id, market_code, market_name, timezone, default_currency_code)
+    VALUES (v_tenant_1, 'MKT_1', 'Market 1', 'America/New_York', 'USD') RETURNING id INTO v_market_t1;
+
+    INSERT INTO market_master (tenant_id, market_code, market_name, timezone, default_currency_code)
+    VALUES (v_tenant_2, 'MKT_2', 'Market 2', 'Europe/London', 'USD') RETURNING id INTO v_market_t2;
 
     -- Setup Charge Specifications
     INSERT INTO charge_specification (tenant_id, charge_code, charge_name, stacking_rule, calculation_type, charge_priority)
