@@ -3,6 +3,10 @@ DECLARE
     v_tenant_1 UUID := gen_random_uuid();
     v_tenant_2 UUID := gen_random_uuid();
     
+    v_cat UUID;
+    v_ver_1 UUID;
+    v_ver_2 UUID;
+    
     v_spec UUID;
     
     v_off_A UUID;
@@ -13,26 +17,34 @@ DECLARE
 
     v_cycle_detected BOOLEAN;
 BEGIN
+    -- Setup Catalogue and Version for Tenant 1
+    INSERT INTO catalogue (tenant_id, name) VALUES (v_tenant_1, 'Cat 1') RETURNING id INTO v_cat;
+    INSERT INTO catalogue_version (tenant_id, catalogue_id, version) VALUES (v_tenant_1, v_cat, 'v1') RETURNING id INTO v_ver_1;
+
     -- Setup Product Specification
     INSERT INTO product_specification (tenant_id, spec_code, spec_name, status)
     VALUES (v_tenant_1, 'SPEC_1', 'Spec 1', 'ACTIVE') RETURNING id INTO v_spec;
 
     -- Create Offerings for Tenant 1
-    INSERT INTO product_offering (tenant_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
-    VALUES (v_tenant_1, v_spec, 'OFF_A', 'Offering A', 'BASE', 'PREPAID') RETURNING id INTO v_off_A;
+    INSERT INTO product_offering (tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
+    VALUES (v_tenant_1, v_ver_1, v_spec, 'OFF_A', 'Offering A', 'BASE', 'PREPAID') RETURNING id INTO v_off_A;
 
-    INSERT INTO product_offering (tenant_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
-    VALUES (v_tenant_1, v_spec, 'OFF_B', 'Offering B', 'ADDON', 'PREPAID') RETURNING id INTO v_off_B;
+    INSERT INTO product_offering (tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
+    VALUES (v_tenant_1, v_ver_1, v_spec, 'OFF_B', 'Offering B', 'ADDON', 'PREPAID') RETURNING id INTO v_off_B;
 
-    INSERT INTO product_offering (tenant_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
-    VALUES (v_tenant_1, v_spec, 'OFF_C', 'Offering C', 'ADDON', 'PREPAID') RETURNING id INTO v_off_C;
+    INSERT INTO product_offering (tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
+    VALUES (v_tenant_1, v_ver_1, v_spec, 'OFF_C', 'Offering C', 'ADDON', 'PREPAID') RETURNING id INTO v_off_C;
+
+    -- Setup Catalogue and Version for Tenant 2
+    INSERT INTO catalogue (tenant_id, name) VALUES (v_tenant_2, 'Cat 2') RETURNING id INTO v_cat;
+    INSERT INTO catalogue_version (tenant_id, catalogue_id, version) VALUES (v_tenant_2, v_cat, 'v1') RETURNING id INTO v_ver_2;
 
     -- Setup Tenant 2
     INSERT INTO product_specification (tenant_id, spec_code, spec_name, status)
     VALUES (v_tenant_2, 'SPEC_1', 'Spec 1', 'ACTIVE') RETURNING id INTO v_spec;
 
-    INSERT INTO product_offering (tenant_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
-    VALUES (v_tenant_2, v_spec, 'OFF_B_T2', 'Offering B T2', 'ADDON', 'PREPAID') RETURNING id INTO v_off_B_t2;
+    INSERT INTO product_offering (tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
+    VALUES (v_tenant_2, v_ver_2, v_spec, 'OFF_B_T2', 'Offering B T2', 'ADDON', 'PREPAID') RETURNING id INTO v_off_B_t2;
 
     -- TEST 1: Valid REQUIRES relationship accepted
     INSERT INTO offering_relationship (tenant_id, source_offering_id, target_offering_id, relationship_type)
@@ -115,17 +127,22 @@ BEGIN
     -- New clean tenant for EXCLUDES
     DECLARE
         v_tenant_3 UUID := gen_random_uuid();
+        v_cat_3 UUID;
+        v_ver_3 UUID;
         v_off_X UUID;
         v_off_Y UUID;
     BEGIN
+        INSERT INTO catalogue (tenant_id, name) VALUES (v_tenant_3, 'Cat 3') RETURNING id INTO v_cat_3;
+        INSERT INTO catalogue_version (tenant_id, catalogue_id, version) VALUES (v_tenant_3, v_cat_3, 'v1') RETURNING id INTO v_ver_3;
+
         INSERT INTO product_specification (tenant_id, spec_code, spec_name, status)
         VALUES (v_tenant_3, 'SPEC_2', 'Spec 2', 'ACTIVE') RETURNING id INTO v_spec;
 
-        INSERT INTO product_offering (tenant_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
-        VALUES (v_tenant_3, v_spec, 'OFF_X', 'Offering X', 'BASE', 'PREPAID') RETURNING id INTO v_off_X;
+        INSERT INTO product_offering (tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
+        VALUES (v_tenant_3, v_ver_3, v_spec, 'OFF_X', 'Offering X', 'BASE', 'PREPAID') RETURNING id INTO v_off_X;
 
-        INSERT INTO product_offering (tenant_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
-        VALUES (v_tenant_3, v_spec, 'OFF_Y', 'Offering Y', 'BASE', 'PREPAID') RETURNING id INTO v_off_Y;
+        INSERT INTO product_offering (tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
+        VALUES (v_tenant_3, v_ver_3, v_spec, 'OFF_Y', 'Offering Y', 'BASE', 'PREPAID') RETURNING id INTO v_off_Y;
 
         INSERT INTO offering_relationship (tenant_id, source_offering_id, target_offering_id, relationship_type)
         VALUES (v_tenant_3, v_off_X, v_off_Y, 'EXCLUDES');
