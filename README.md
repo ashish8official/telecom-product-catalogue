@@ -30,6 +30,7 @@ Modern telecom architectures struggle with tightly coupled CRMs, Billing, and Or
 * **🛡️ Bulletproof Immutability:** Released catalogue versions are locked via database triggers. No accidental in-flight mutations.
 * **♾️ Infinite Hierarchies:** Market and Category trees support infinite depth with recursive CTE cycle-detection built right into the schema.
 * **📜 Dynamic Policy Engine:** Attach complex business eligibility rules using deeply integrated JSON-schema validation (via Ajv).
+* **🧠 Deterministic Resolution Engine:** Isolated micro-resolvers handle timezone-aware policy bounds, priority-based charge stacking, recursive market tax fallbacks, and GL bindings.
 * **🌍 Realistic Integration Fixture:** Includes a comprehensive African/Indian telecom seed dataset with automated assertions for testing complex hierarchy and pricing rules.
 
 ---
