@@ -29,7 +29,7 @@ tmf620Router.get('/productSpecification', async (req: Request, res: Response) =>
 tmf620Router.get('/productSpecification/:id', async (req: Request, res: Response) => {
     try {
         const tenantId = getTenantId(req);
-        const spec = await catalogService.getProductSpecificationById(tenantId, req.params.id);
+        const spec = await catalogService.getProductSpecificationById(tenantId, req.params.id as string);
         if (!spec) {
             return res.status(404).json({ error: 'ProductSpecification not found' });
         }
@@ -56,7 +56,7 @@ tmf620Router.get('/productOffering', async (req: Request, res: Response) => {
 tmf620Router.get('/productOffering/:id', async (req: Request, res: Response) => {
     try {
         const tenantId = getTenantId(req);
-        const offering = await catalogService.getProductOfferingById(tenantId, req.params.id);
+        const offering = await catalogService.getProductOfferingById(tenantId, req.params.id as string);
         if (!offering) {
             return res.status(404).json({ error: 'ProductOffering not found' });
         }
