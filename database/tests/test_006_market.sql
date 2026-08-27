@@ -7,9 +7,9 @@ DECLARE
     v_leaf_market UUID;
     v_cycle_check BOOLEAN;
 BEGIN
-    -- Setup Currency
-    INSERT INTO currency_master (currency_code, currency_name) VALUES ('USD', 'US Dollar');
-    INSERT INTO currency_master (currency_code, currency_name) VALUES ('EUR', 'Euro');
+    -- Setup Currencies
+    INSERT INTO currency_master (currency_code, currency_name) VALUES ('USD', 'US Dollar') ON CONFLICT DO NOTHING;
+    INSERT INTO currency_master (currency_code, currency_name) VALUES ('EUR', 'Euro') ON CONFLICT DO NOTHING;
 
     -- Test 1: currency FK enforced & ISO code CHECK
     BEGIN
