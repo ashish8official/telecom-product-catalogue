@@ -70,9 +70,9 @@ This section represents our engine's own internal domain and is explicitly *not*
 ### Configuration & Policy
 * **`offering_relationship`**: Bundling, prerequisites, and incompatibilities.
   * **Purpose**: Links offerings together (e.g., add-ons, prerequisites).
-  * **Key Fields**: relationship_type, tenant_id.
+  * **Key Fields**: relationship_type, tenant_id. Allowed types: 'REQUIRES', 'EXCLUDES', 'UPGRADE'.
   * **FK**: source_offering_id → product_offering, target_offering_id → product_offering.
-  * **Constraint**: Circular relationship protection is handled by a recursive CTE cycle check in a DB function, called from the service layer (not a trigger).
+  * **Constraint**: Circular relationship protection is handled by a recursive CTE cycle check in a DB function (`check_offering_relationship_cycle`), called from the service layer (not a trigger). Cycle detection only applies to directed dependencies ('REQUIRES', 'UPGRADE'). Mutual 'EXCLUDES' is permitted and does not constitute a cycle.
 * **`offering_category`**: UI and organizational grouping.
   * **Purpose**: Presentation only. No pricing, billing, provisioning, or eligibility meaning.
   * **Key Fields**: name, hierarchy_level, tenant_id.
