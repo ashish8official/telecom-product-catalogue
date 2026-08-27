@@ -1,5 +1,5 @@
 const API_BASE = 'http://localhost:3000/productCatalogManagement/v5';
-const TENANT_ID = '19000000-0000-4000-a000-000000000001'; 
+const TENANT_ID = '17000000-0000-4000-a000-000000000000'; 
 
 // In a real TMF scenario, tenant identification might be through auth headers.
 const HEADERS = {

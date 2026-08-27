@@ -1,5 +1,5 @@
 const API_BASE = 'http://localhost:3000/api/internal';
-const TENANT_ID = '19000000-0000-4000-a000-000000000001'; // Default test tenant from seed
+const TENANT_ID = '17000000-0000-4000-a000-000000000000'; // Default test tenant from seed
 
 document.getElementById('tenant-display').textContent = TENANT_ID;
 
