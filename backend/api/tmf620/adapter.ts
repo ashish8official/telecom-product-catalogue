@@ -46,7 +46,7 @@ export class TMF620Adapter {
             description: `Pricing for ${internal.charge_name}`,
             priceType: internal.calculation_type, // Typically recurring, one_time, etc.
             price: {
-                value: parseFloat(internal.amount), // ensure numeric
+                value: Number(internal.amount), // ensure numeric
                 unit: internal.currency_code
             },
             validFor: {
