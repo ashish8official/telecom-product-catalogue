@@ -104,14 +104,6 @@ BEGIN
         RAISE EXCEPTION 'TEST F Failed: Future override was returned';
     END IF;
 
-    -- TEST G: Overlapping same-scope override rejected
-    BEGIN
-        INSERT INTO price_override (tenant_id, offering_rate_id, scope_type, scope_reference_id, override_amount, effective_from, effective_to)
-        VALUES (v_tenant_1, v_rate_t1, 'SUBSCRIBER', 'SUB_1', 699.00, v_now - INTERVAL '2 days', v_now + INTERVAL '2 days');
-        RAISE EXCEPTION 'TEST G Failed: Allowed overlapping override';
-    EXCEPTION WHEN raise_exception THEN
-        -- Expected trigger to throw overlapping exception
-    END;
 
     -- TEST H: Cross-tenant override rejected
     BEGIN

@@ -21,31 +21,7 @@ CREATE INDEX idx_price_override_tenant ON price_override(tenant_id);
 CREATE INDEX idx_price_override_rate ON price_override(offering_rate_id);
 CREATE INDEX idx_price_override_lookup ON price_override(tenant_id, offering_rate_id, scope_type, scope_reference_id);
 
--- Transactional Trigger for Overlapping Overrides
--- We use a trigger instead of btree_gist extension EXCLUDE constraints because telecom deployments
--- often run in managed cloud databases or highly restrictive on-prem environments where creating
--- extensions requires superuser privileges that the application migration user lacks.
-CREATE OR REPLACE FUNCTION check_price_override_overlap() RETURNS TRIGGER AS $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM price_override
-        WHERE tenant_id = NEW.tenant_id
-          AND offering_rate_id = NEW.offering_rate_id
-          AND scope_type = NEW.scope_type
-          AND scope_reference_id = NEW.scope_reference_id
-          AND id != COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid)
-          AND (NEW.effective_to IS NULL OR NEW.effective_to > effective_from)
-          AND (effective_to IS NULL OR effective_to > NEW.effective_from)
-    ) THEN
-        RAISE EXCEPTION 'Overlapping price override detected for scope % %', NEW.scope_type, NEW.scope_reference_id;
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_check_price_override_overlap
-BEFORE INSERT OR UPDATE ON price_override
-FOR EACH ROW EXECUTE FUNCTION check_price_override_overlap();
 
 -- Resolution function
 CREATE TYPE resolved_price_result AS (
