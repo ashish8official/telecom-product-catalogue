@@ -97,4 +97,48 @@ describe('TMF620 Adapter Layer', () => {
             expect(res.body).not.toHaveProperty('offering_code');
         });
     });
+
+    describe('GET /productOfferingPrice/:id', () => {
+        it('should map internal model to TMF620 shape without leaking internal fields', async () => {
+            const internalRate = {
+                id: 'rate-789',
+                tenant_id: mockTenantId,
+                charge_spec_id: 'charge-123',
+                market_id: 'market-123',
+                currency_code: 'USD',
+                amount: 15.500000,
+                charge_name: 'Monthly Data Charge',
+                calculation_type: 'RECURRING',
+                valid_from: new Date('2023-01-01T00:00:00Z'),
+                valid_to: undefined
+            };
+
+            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(internalRate);
+
+            const res = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789')
+                .set('x-tenant-id', mockTenantId);
+
+            expect(res.status).toBe(200);
+
+            // Assert TMF620 shape
+            expect(res.body).toHaveProperty('id', 'rate-789');
+            expect(res.body).toHaveProperty('name', 'Monthly Data Charge');
+            expect(res.body).toHaveProperty('priceType', 'RECURRING');
+            expect(res.body).toHaveProperty('price');
+            expect(res.body.price).toHaveProperty('value', 15.5);
+            expect(res.body.price).toHaveProperty('unit', 'USD');
+            expect(res.body).toHaveProperty('validFor');
+
+            // Assert internal fields DO NOT LEAK
+            expect(res.body).not.toHaveProperty('tenant_id');
+            expect(res.body).not.toHaveProperty('charge_spec_id');
+            expect(res.body).not.toHaveProperty('market_id');
+            expect(res.body).not.toHaveProperty('currency_code');
+            expect(res.body).not.toHaveProperty('amount');
+            expect(res.body).not.toHaveProperty('charge_name');
+            expect(res.body).not.toHaveProperty('calculation_type');
+            expect(res.body).not.toHaveProperty('valid_from');
+        });
+    });
 });

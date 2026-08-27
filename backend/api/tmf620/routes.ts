@@ -69,3 +69,30 @@ tmf620Router.get('/productOffering/:id', async (req: Request, res: Response) => 
         res.status(400).json({ error: error.message });
     }
 });
+
+// GET /productCatalogManagement/v5/productOfferingPrice
+tmf620Router.get('/productOfferingPrice', async (req: Request, res: Response) => {
+    try {
+        const tenantId = getTenantId(req);
+        // Note: price_override resolution is not implemented yet.
+        const prices = await catalogService.getProductOfferingPrices(tenantId);
+        res.json(prices.map(price => TMF620Adapter.mapToProductOfferingPrice(price)));
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+// GET /productCatalogManagement/v5/productOfferingPrice/{id}
+tmf620Router.get('/productOfferingPrice/:id', async (req: Request, res: Response) => {
+    try {
+        const tenantId = getTenantId(req);
+        // Note: price_override resolution is not implemented yet.
+        const price = await catalogService.getProductOfferingPriceById(tenantId, req.params.id as string);
+        if (!price) {
+            return res.status(404).json({ error: 'ProductOfferingPrice not found' });
+        }
+        res.json(TMF620Adapter.mapToProductOfferingPrice(price));
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
