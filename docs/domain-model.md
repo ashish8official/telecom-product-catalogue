@@ -82,19 +82,27 @@ This section represents our engine's own internal domain and is explicitly *not*
   * **Key Fields**: tenant_id.
   * **FK**: product_offering_id → product_offering, category_id → offering_category.
 * **`policy_schema`**: JSON schemas for policies.
-  * **Purpose**: Defines the rigid schema rules that a policy JSON payload must pass.
-  * **Key Fields**: schema_json, tenant_id.
+  * **Purpose**: Defines the structural validation rules that a `policy_rule` JSON payload must pass (e.g., requires `market_code` as string). **JSON Schema is the STRUCTURAL SCHEMA**, not the business eligibility rule itself.
+  * **Key Fields**: schema_name, version, schema_json, tenant_id.
   * **PK**: id.
+  * **Versioning**: Policy schemas are versioned. If a material structure change occurs, a new version must be created so existing rules remain bound to their original version. Unique constraint on `tenant_id + schema_name + version`.
+  * **Validation Boundary**: JSON Schema semantic validation MUST happen in the application/service layer. The DB does not perform JSON schema business validation via CHECK constraints or triggers.
 * **`policy_rule`**: The actual policy data.
-  * **Purpose**: The dynamic JSON data evaluated during order time.
+  * **Purpose**: The dynamic JSON data defining business eligibility rules (e.g., `{"market_code": "NIGERIA"}`). **Policy evaluation is intentionally deferred** and remains outside the scope of current persistence structure.
   * **Key Fields**: rule_json, tenant_id.
   * **PK**: id.
-  * **FK**: schema_id → policy_schema.
-  * **Defaults**: Policy JSON is never accepted without validation against a `policy_schema` record.
+  * **FK**: schema_id → policy_schema (composite tenant-safe FK ensuring both belong to the same tenant).
 * **`policy_mapping`**: Attaching policies to offerings.
-  * **Purpose**: Binds a policy to an offering.
+  * **Purpose**: Binds a policy rule to a `product_offering`.
   * **Key Fields**: tenant_id.
-  * **FK**: product_offering_id → product_offering, policy_rule_id → policy_rule.
+  * **FK**: product_offering_id → product_offering, policy_rule_id → policy_rule (composite tenant-safe FKs to enforce strict tenant isolation).
+
+> **Important Conceptual Boundaries for Policies**:
+> 1. **Market Hierarchy**: The authoritative market structure remains `market_master`. Do not duplicate market hierarchies (like `policy_market` or `policy_country`) or hardcode timezones/regions into policy tables.
+> 2. **Timezone Boundary**: Time-window evaluation is deferred to a future resolution engine which must derive timezone data from the runtime resolved market, not server local time.
+> 3. **Unit-Credit Boundary**: `UNIT_CREDIT` represents a catalogue-defined discount/benefit. It is NOT a subscriber balance, real-time counter, charging bucket, or SPR balance. Actual usage tracking is outside the catalogue.
+> 4. **Deferred Evaluation**: Do not build evaluation priorities, `ALL`/`ANY` operators, or lifecycle states into the policy tables unless explicitly required by later phases.
+
 * **`tax_configuration` & `tax_mapping`**: Setup for external tax integration or basic engine calculation.
 * **`journal_configuration` & `journal_mapping`**: Ledger and GL mappings for accounting output.
 
