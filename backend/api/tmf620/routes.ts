@@ -21,7 +21,8 @@ tmf620Router.get('/productSpecification', async (req: Request, res: Response) =>
         const specs = await catalogService.getProductSpecifications(tenantId);
         res.json(specs.map(spec => TMF620Adapter.mapToProductSpecification(spec)));
     } catch (error: any) {
-        res.status(400).json({ error: error.message });
+        console.error("API Error:", error);
+        res.status(400).json({ error: error.message || String(error) });
     }
 });
 
@@ -35,7 +36,8 @@ tmf620Router.get('/productSpecification/:id', async (req: Request, res: Response
         }
         res.json(TMF620Adapter.mapToProductSpecification(spec));
     } catch (error: any) {
-        res.status(400).json({ error: error.message });
+        console.error("API Error:", error);
+        res.status(400).json({ error: error.message || String(error) });
     }
 });
 
@@ -48,7 +50,8 @@ tmf620Router.get('/productOffering', async (req: Request, res: Response) => {
         // For this skeleton, we map without the optional spec_name.
         res.json(offerings.map(off => TMF620Adapter.mapToProductOffering(off)));
     } catch (error: any) {
-        res.status(400).json({ error: error.message });
+        console.error("API Error:", error);
+        res.status(400).json({ error: error.message || String(error) });
     }
 });
 
@@ -66,7 +69,8 @@ tmf620Router.get('/productOffering/:id', async (req: Request, res: Response) => 
         
         res.json(TMF620Adapter.mapToProductOffering(offering, spec?.spec_name));
     } catch (error: any) {
-        res.status(400).json({ error: error.message });
+        console.error("API Error:", error);
+        res.status(400).json({ error: error.message || String(error) });
     }
 });
 
@@ -78,7 +82,8 @@ tmf620Router.get('/productOfferingPrice', async (req: Request, res: Response) =>
         const prices = await catalogService.getProductOfferingPrices(tenantId);
         res.json(prices.map(price => TMF620Adapter.mapToProductOfferingPrice(price)));
     } catch (error: any) {
-        res.status(400).json({ error: error.message });
+        console.error("API Error:", error);
+        res.status(400).json({ error: error.message || String(error) });
     }
 });
 
@@ -93,6 +98,7 @@ tmf620Router.get('/productOfferingPrice/:id', async (req: Request, res: Response
         }
         res.json(TMF620Adapter.mapToProductOfferingPrice(price));
     } catch (error: any) {
-        res.status(400).json({ error: error.message });
+        console.error("API Error:", error);
+        res.status(400).json({ error: error.message || String(error) });
     }
 });
