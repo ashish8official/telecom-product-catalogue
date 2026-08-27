@@ -30,3 +30,7 @@ pgdata/
 # Application logs
 logs/
 *.log
+
+# Dependencies & build output
+node_modules/
+dist/
