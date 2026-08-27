@@ -38,15 +38,29 @@ export class TMF620Adapter {
         };
     }
 
+    static mapPriceType(calculationType: string): string {
+        // TMF620 common values: recurring, oneTime, usage, tariff
+        switch (calculationType.toUpperCase()) {
+            case 'FLAT':
+                return 'recurring';
+            case 'PERCENTAGE':
+                return 'tariff';
+            default:
+                return 'oneTime';
+        }
+    }
+
     static mapToProductOfferingPrice(internal: InternalResolvedRate): TMFProductOfferingPrice {
         return {
             id: internal.id,
             href: `${this.getBaseUrl()}/productCatalogManagement/v5/productOfferingPrice/${internal.id}`,
             name: internal.charge_name,
-            description: `Pricing for ${internal.charge_name}`,
-            priceType: internal.calculation_type, // Typically recurring, one_time, etc.
+            description: internal.resolution_source 
+                ? `Pricing for ${internal.charge_name} (Resolved via ${internal.resolution_source})`
+                : `Pricing for ${internal.charge_name}`,
+            priceType: this.mapPriceType(internal.calculation_type),
             price: {
-                value: Number(internal.amount), // ensure numeric
+                value: Number(internal.amount),
                 unit: internal.currency_code
             },
             validFor: {

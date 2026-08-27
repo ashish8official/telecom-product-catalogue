@@ -58,9 +58,13 @@ export class ProductRepository {
         return result.rows[0] || null;
     }
 
-    async getResolvedOfferingPrices(tenantId: string): Promise<InternalResolvedRate[]> {
-        // Simplified query to return all rates with their charge spec info.
-        // In a real system, this would be filtered by market_id/currency_code via resolver logic.
+    async getResolvedOfferingPrices(
+        tenantId: string,
+        subscriberId?: string,
+        accountId?: string,
+        marketId?: string,
+        effectiveAt?: Date
+    ): Promise<InternalResolvedRate[]> {
         const query = `
             SELECT 
                 r.id,
@@ -68,19 +72,34 @@ export class ProductRepository {
                 r.charge_spec_id,
                 r.market_id,
                 r.currency_code,
-                r.amount,
+                rp.amount as amount,
+                rp.source as resolution_source,
                 r.created_at as valid_from,
                 c.charge_name,
                 c.calculation_type
             FROM offering_rate r
             JOIN charge_specification c ON r.charge_spec_id = c.id AND r.tenant_id = c.tenant_id
+            CROSS JOIN LATERAL resolve_price($1, r.id, $2, $3, $4, COALESCE($5, NOW())) rp
             WHERE r.tenant_id = $1
         `;
-        const result = await pool.query(query, [tenantId]);
+        const result = await pool.query(query, [
+            tenantId, 
+            subscriberId || null, 
+            accountId || null, 
+            marketId || null, 
+            effectiveAt || null
+        ]);
         return result.rows;
     }
 
-    async getResolvedOfferingPriceById(tenantId: string, id: string): Promise<InternalResolvedRate | null> {
+    async getResolvedOfferingPriceById(
+        tenantId: string, 
+        id: string,
+        subscriberId?: string,
+        accountId?: string,
+        marketId?: string,
+        effectiveAt?: Date
+    ): Promise<InternalResolvedRate | null> {
         const query = `
             SELECT 
                 r.id,
@@ -88,15 +107,24 @@ export class ProductRepository {
                 r.charge_spec_id,
                 r.market_id,
                 r.currency_code,
-                r.amount,
+                rp.amount as amount,
+                rp.source as resolution_source,
                 r.created_at as valid_from,
                 c.charge_name,
                 c.calculation_type
             FROM offering_rate r
             JOIN charge_specification c ON r.charge_spec_id = c.id AND r.tenant_id = c.tenant_id
+            CROSS JOIN LATERAL resolve_price($1, r.id, $3, $4, $5, COALESCE($6, NOW())) rp
             WHERE r.tenant_id = $1 AND r.id = $2
         `;
-        const result = await pool.query(query, [tenantId, id]);
+        const result = await pool.query(query, [
+            tenantId,
+            id,
+            subscriberId || null,
+            accountId || null,
+            marketId || null,
+            effectiveAt || null
+        ]);
         return result.rows[0] || null;
     }
 }
@@ -108,6 +136,7 @@ export interface InternalResolvedRate {
     market_id: string;
     currency_code: string;
     amount: number;
+    resolution_source?: string;
     charge_name: string;
     calculation_type: string;
     valid_from: Date;

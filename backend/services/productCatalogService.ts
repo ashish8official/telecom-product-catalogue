@@ -1,4 +1,4 @@
-import { ProductRepository, InternalProductSpecification, InternalProductOffering } from '../repositories/productRepository';
+import { ProductRepository, InternalProductSpecification, InternalProductOffering, InternalResolvedRate } from '../repositories/productRepository';
 
 const productRepo = new ProductRepository();
 
@@ -23,15 +23,26 @@ export class ProductCatalogService {
         return await productRepo.getProductOfferingById(tenantId, id);
     }
 
-    async getProductOfferingPrices(tenantId: string): Promise<any[]> {
+    async getProductOfferingPrices(
+        tenantId: string,
+        subscriberId?: string,
+        accountId?: string,
+        marketId?: string,
+        effectiveAt?: Date
+    ): Promise<InternalResolvedRate[]> {
         if (!tenantId) throw new Error('tenantId is required');
-        // TODO: price_override resolution is not implemented yet.
-        return await productRepo.getResolvedOfferingPrices(tenantId);
+        return await productRepo.getResolvedOfferingPrices(tenantId, subscriberId, accountId, marketId, effectiveAt);
     }
 
-    async getProductOfferingPriceById(tenantId: string, id: string): Promise<any | null> {
+    async getProductOfferingPriceById(
+        tenantId: string, 
+        id: string,
+        subscriberId?: string,
+        accountId?: string,
+        marketId?: string,
+        effectiveAt?: Date
+    ): Promise<InternalResolvedRate | null> {
         if (!tenantId) throw new Error('tenantId is required');
-        // TODO: price_override resolution is not implemented yet.
-        return await productRepo.getResolvedOfferingPriceById(tenantId, id);
+        return await productRepo.getResolvedOfferingPriceById(tenantId, id, subscriberId, accountId, marketId, effectiveAt);
     }
 }

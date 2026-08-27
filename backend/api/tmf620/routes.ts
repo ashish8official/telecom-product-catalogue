@@ -78,8 +78,13 @@ tmf620Router.get('/productOffering/:id', async (req: Request, res: Response) => 
 tmf620Router.get('/productOfferingPrice', async (req: Request, res: Response) => {
     try {
         const tenantId = getTenantId(req);
-        // Note: price_override resolution is not implemented yet.
-        const prices = await catalogService.getProductOfferingPrices(tenantId);
+        
+        const subscriberId = req.query.subscriberId as string | undefined;
+        const accountId = req.query.accountId as string | undefined;
+        const marketId = req.query.marketId as string | undefined;
+        const effectiveAt = req.query.effectiveAt ? new Date(req.query.effectiveAt as string) : undefined;
+        
+        const prices = await catalogService.getProductOfferingPrices(tenantId, subscriberId, accountId, marketId, effectiveAt);
         res.json(prices.map(price => TMF620Adapter.mapToProductOfferingPrice(price)));
     } catch (error: any) {
         console.error("API Error:", error);
@@ -91,8 +96,13 @@ tmf620Router.get('/productOfferingPrice', async (req: Request, res: Response) =>
 tmf620Router.get('/productOfferingPrice/:id', async (req: Request, res: Response) => {
     try {
         const tenantId = getTenantId(req);
-        // Note: price_override resolution is not implemented yet.
-        const price = await catalogService.getProductOfferingPriceById(tenantId, req.params.id as string);
+
+        const subscriberId = req.query.subscriberId as string | undefined;
+        const accountId = req.query.accountId as string | undefined;
+        const marketId = req.query.marketId as string | undefined;
+        const effectiveAt = req.query.effectiveAt ? new Date(req.query.effectiveAt as string) : undefined;
+
+        const price = await catalogService.getProductOfferingPriceById(tenantId, req.params.id as string, subscriberId, accountId, marketId, effectiveAt);
         if (!price) {
             return res.status(404).json({ error: 'ProductOfferingPrice not found' });
         }

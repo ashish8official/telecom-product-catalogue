@@ -99,21 +99,22 @@ describe('TMF620 Adapter Layer', () => {
     });
 
     describe('GET /productOfferingPrice/:id', () => {
-        it('should map internal model to TMF620 shape without leaking internal fields', async () => {
-            const internalRate = {
-                id: 'rate-789',
-                tenant_id: mockTenantId,
-                charge_spec_id: 'charge-123',
-                market_id: 'market-123',
-                currency_code: 'USD',
-                amount: 15.500000,
-                charge_name: 'Monthly Data Charge',
-                calculation_type: 'RECURRING',
-                valid_from: new Date('2023-01-01T00:00:00Z'),
-                valid_to: undefined
-            };
+        const mockInternalRate = {
+            id: 'rate-789',
+            tenant_id: mockTenantId,
+            charge_spec_id: 'charge-123',
+            market_id: 'market-123',
+            currency_code: 'USD',
+            amount: 15.500000,
+            resolution_source: 'CATALOGUE_RATE',
+            charge_name: 'Monthly Data Charge',
+            calculation_type: 'FLAT',
+            valid_from: new Date('2023-01-01T00:00:00Z'),
+            valid_to: undefined
+        };
 
-            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(internalRate);
+        it('1, 5, 9, 11: No context -> base price, internal fields do not leak, old tests pass', async () => {
+            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(mockInternalRate);
 
             const res = await request(app)
                 .get('/productCatalogManagement/v5/productOfferingPrice/rate-789')
@@ -121,24 +122,110 @@ describe('TMF620 Adapter Layer', () => {
 
             expect(res.status).toBe(200);
 
-            // Assert TMF620 shape
+            // Verify service was called with no context parameters
+            expect(ProductCatalogService.prototype.getProductOfferingPriceById).toHaveBeenCalledWith(
+                mockTenantId, 'rate-789', undefined, undefined, undefined, undefined
+            );
+
+            // Verify mapping
             expect(res.body).toHaveProperty('id', 'rate-789');
             expect(res.body).toHaveProperty('name', 'Monthly Data Charge');
-            expect(res.body).toHaveProperty('priceType', 'RECURRING');
+            expect(res.body).toHaveProperty('description', 'Pricing for Monthly Data Charge (Resolved via CATALOGUE_RATE)');
+            expect(res.body).toHaveProperty('priceType', 'recurring'); // FLAT mapped to recurring
             expect(res.body).toHaveProperty('price');
             expect(res.body.price).toHaveProperty('value', 15.5);
             expect(res.body.price).toHaveProperty('unit', 'USD');
             expect(res.body).toHaveProperty('validFor');
+            expect(res.body.validFor).toHaveProperty('startDateTime', '2023-01-01T00:00:00.000Z');
+            expect(res.body.validFor).not.toHaveProperty('endDateTime');
 
-            // Assert internal fields DO NOT LEAK
+            // Internal fields should not leak
             expect(res.body).not.toHaveProperty('tenant_id');
-            expect(res.body).not.toHaveProperty('charge_spec_id');
-            expect(res.body).not.toHaveProperty('market_id');
-            expect(res.body).not.toHaveProperty('currency_code');
             expect(res.body).not.toHaveProperty('amount');
-            expect(res.body).not.toHaveProperty('charge_name');
+            expect(res.body).not.toHaveProperty('resolution_source');
             expect(res.body).not.toHaveProperty('calculation_type');
             expect(res.body).not.toHaveProperty('valid_from');
+        });
+
+        it('2. Market context -> market override', async () => {
+            const marketOverrideRate = { ...mockInternalRate, amount: 10.0, resolution_source: 'MARKET' };
+            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(marketOverrideRate);
+
+            const res = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789?marketId=mkt-1')
+                .set('x-tenant-id', mockTenantId);
+
+            expect(res.status).toBe(200);
+            expect(ProductCatalogService.prototype.getProductOfferingPriceById).toHaveBeenCalledWith(
+                mockTenantId, 'rate-789', undefined, undefined, 'mkt-1', undefined
+            );
+            expect(res.body.price.value).toBe(10.0);
+            expect(res.body.description).toContain('Resolved via MARKET');
+        });
+
+        it('3. Account context -> account override', async () => {
+            const accOverrideRate = { ...mockInternalRate, amount: 8.0, resolution_source: 'ACCOUNT' };
+            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(accOverrideRate);
+
+            const res = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789?accountId=acc-1')
+                .set('x-tenant-id', mockTenantId);
+
+            expect(res.status).toBe(200);
+            expect(ProductCatalogService.prototype.getProductOfferingPriceById).toHaveBeenCalledWith(
+                mockTenantId, 'rate-789', undefined, 'acc-1', undefined, undefined
+            );
+            expect(res.body.price.value).toBe(8.0);
+            expect(res.body.description).toContain('Resolved via ACCOUNT');
+        });
+
+        it('4. Subscriber context -> subscriber override', async () => {
+            const subOverrideRate = { ...mockInternalRate, amount: 5.0, resolution_source: 'SUBSCRIBER' };
+            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(subOverrideRate);
+
+            const effectiveDate = new Date().toISOString();
+            const res = await request(app)
+                .get(`/productCatalogManagement/v5/productOfferingPrice/rate-789?subscriberId=sub-1&effectiveAt=${effectiveDate}`)
+                .set('x-tenant-id', mockTenantId);
+
+            expect(res.status).toBe(200);
+            expect(ProductCatalogService.prototype.getProductOfferingPriceById).toHaveBeenCalledWith(
+                mockTenantId, 'rate-789', 'sub-1', undefined, undefined, new Date(effectiveDate)
+            );
+            expect(res.body.price.value).toBe(5.0);
+            expect(res.body.description).toContain('Resolved via SUBSCRIBER');
+        });
+
+        it('6, 7, 8. Correct priceType mapping (PERCENTAGE -> tariff), Currency, Validity (with endDateTime)', async () => {
+            const tariffRate = { 
+                ...mockInternalRate, 
+                calculation_type: 'PERCENTAGE',
+                currency_code: 'EUR',
+                valid_to: new Date('2024-01-01T00:00:00Z')
+            };
+            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(tariffRate);
+
+            const res = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789')
+                .set('x-tenant-id', mockTenantId);
+
+            expect(res.body.priceType).toBe('tariff');
+            expect(res.body.price.unit).toBe('EUR');
+            expect(res.body.validFor.endDateTime).toBe('2024-01-01T00:00:00.000Z');
+        });
+
+        it('10. Tenant isolation is enforced', async () => {
+            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(null);
+            
+            // Simulating a case where tenant does not own the rate ID
+            const res = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789')
+                .set('x-tenant-id', 'WRONG-TENANT');
+
+            expect(res.status).toBe(404);
+            expect(ProductCatalogService.prototype.getProductOfferingPriceById).toHaveBeenCalledWith(
+                'WRONG-TENANT', 'rate-789', undefined, undefined, undefined, undefined
+            );
         });
     });
 });
