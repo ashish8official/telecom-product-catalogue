@@ -95,7 +95,17 @@ This section represents our engine's own internal domain and is explicitly *not*
   * **Purpose**: Binds a policy to an offering.
   * **Key Fields**: tenant_id.
   * **FK**: product_offering_id → product_offering, policy_rule_id → policy_rule.
-* **`tax_configuration` & `tax_mapping`**: Setup for external tax integration or basic engine calculation.
+* **`tax_configuration`**: Setup for engine tax calculation.
+  * **Purpose**: Defines which taxes apply to catalogue charges.
+  * **Key Fields**: tax_name, tax_rate (percentage `NUMERIC(9,6)`), market_master_id (nullable), tenant_id.
+  * **PK**: id.
+  * **Validation**: `tax_rate >= 0` and `tax_rate <= 100`.
+  * **FK**: market_master_id → market_master (tenant-safe composite FK). NULL market means the tax is universally applicable (fallback logic is handled by the future resolution engine).
+* **`tax_mapping`**: Attaching tax to charges.
+  * **Purpose**: Maps a specific tax to a `charge_specification`.
+  * **Key Fields**: tenant_id.
+  * **FK**: charge_specification_id → charge_specification, tax_configuration_id → tax_configuration (composite tenant-safe FKs to enforce strict isolation).
+  * **Constraint**: Unique mapping per charge specification and tax configuration.
 * **`journal_configuration` & `journal_mapping`**: Ledger and GL mappings for accounting output.
 
 ---
