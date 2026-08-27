@@ -15,7 +15,6 @@ async function run() {
         console.log("Connected to PostgreSQL");
         
         const files = [
-            '../database/migrations/016_price_hardening.up.sql',
             '../database/tests/test_008_pricing.sql',
             '../database/tests/test_012_tax.sql',
             '../database/tests/test_015_override.sql'

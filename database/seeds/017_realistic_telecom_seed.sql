@@ -8,8 +8,15 @@ BEGIN;
 -- 0. Clean up previous seed data for this tenant
 DO $$
 DECLARE
+    v_db_name TEXT;
     v_tenant UUID := '17000000-0000-4000-a000-000000000000';
 BEGIN
+    SELECT current_database() INTO v_db_name;
+    -- Explicit safety boundary: Only run in test or local dev databases
+    IF v_db_name NOT IN ('catalogue_db', 'catalogue_test') THEN
+        RAISE EXCEPTION 'SEED SAFETY GUARD: Refusing to run in database % (expected catalogue_db or catalogue_test)', v_db_name;
+    END IF;
+
     DELETE FROM journal_mapping WHERE tenant_id = v_tenant;
     DELETE FROM journal_configuration WHERE tenant_id = v_tenant;
     DELETE FROM tax_mapping WHERE tenant_id = v_tenant;
@@ -44,7 +51,7 @@ INSERT INTO market_master (id, tenant_id, market_code, market_name, timezone, de
 ('17000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000000', 'IND', 'India', 'Asia/Kolkata', 'INR'),
 ('17000000-0000-4000-a000-000000000002', '17000000-0000-4000-a000-000000000000', 'AFR', 'Africa', 'Africa/Lagos', 'NGN'),
 ('17000000-0000-4000-a000-000000000003', '17000000-0000-4000-a000-000000000000', 'NGA', 'Nigeria', 'Africa/Lagos', 'NGN'),
-('17000000-0000-4000-a000-000000000004', '17000000-0000-4000-a000-000000000000', 'LAG', 'Lagos', 'Africa/Lagos', 'NGN'),
+('17000000-0000-4000-a000-000000000004', '17000000-0000-4000-a000-000000000000', 'LAGOS', 'Lagos', 'Africa/Lagos', 'NGN'),
 ('17000000-0000-4000-a000-000000000005', '17000000-0000-4000-a000-000000000000', 'KEN', 'Kenya', 'Africa/Nairobi', 'KES'),
 ('17000000-0000-4000-a000-000000000006', '17000000-0000-4000-a000-000000000000', 'ZAF', 'South Africa', 'Africa/Johannesburg', 'ZAR');
 
