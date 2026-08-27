@@ -20,11 +20,17 @@ CREATE TABLE offering_service_component (
     tenant_id UUID NOT NULL,
     offering_id UUID NOT NULL,
     service_spec_id UUID NOT NULL,
+    mandatory_flag BOOLEAN NOT NULL DEFAULT TRUE,
+    min_qty INTEGER NOT NULL DEFAULT 1,
+    max_qty INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT uq_offering_service_component UNIQUE (tenant_id, offering_id, service_spec_id),
     CONSTRAINT offering_service_component_offering_fk FOREIGN KEY (tenant_id, offering_id) REFERENCES product_offering(tenant_id, id) ON DELETE CASCADE,
-    CONSTRAINT offering_service_component_spec_fk FOREIGN KEY (tenant_id, service_spec_id) REFERENCES service_specification(tenant_id, id) ON DELETE RESTRICT
+    CONSTRAINT offering_service_component_spec_fk FOREIGN KEY (tenant_id, service_spec_id) REFERENCES service_specification(tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT chk_offering_svc_comp_min_qty CHECK (min_qty >= 0),
+    CONSTRAINT chk_offering_svc_comp_max_qty CHECK (max_qty >= min_qty),
+    CONSTRAINT chk_offering_svc_comp_mandatory CHECK (mandatory_flag = TRUE OR min_qty = 0)
 );
 
 CREATE INDEX idx_offering_svc_comp_tenant ON offering_service_component(tenant_id);

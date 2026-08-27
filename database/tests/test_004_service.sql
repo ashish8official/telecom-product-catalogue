@@ -50,6 +50,37 @@ BEGIN
         -- Expected
     END;
 
+    -- Test 4: min_qty >= 0
+    BEGIN
+        INSERT INTO offering_service_component (tenant_id, offering_id, service_spec_id, min_qty)
+        VALUES (v_tenant_id, v_offering_id, v_service_spec_2, -1);
+        RAISE EXCEPTION 'Test 4 Failed: Allowed negative min_qty';
+    EXCEPTION WHEN check_violation THEN
+        -- Expected
+    END;
+
+    -- Test 5: max_qty >= min_qty
+    BEGIN
+        INSERT INTO offering_service_component (tenant_id, offering_id, service_spec_id, min_qty, max_qty)
+        VALUES (v_tenant_id, v_offering_id, v_service_spec_2, 5, 1);
+        RAISE EXCEPTION 'Test 5 Failed: Allowed max_qty < min_qty';
+    EXCEPTION WHEN check_violation THEN
+        -- Expected
+    END;
+
+    -- Test 6: mandatory_flag = FALSE requires min_qty = 0
+    BEGIN
+        INSERT INTO offering_service_component (tenant_id, offering_id, service_spec_id, mandatory_flag, min_qty, max_qty)
+        VALUES (v_tenant_id, v_offering_id, v_service_spec_2, FALSE, 1, 1);
+        RAISE EXCEPTION 'Test 6 Failed: Allowed mandatory_flag=FALSE with min_qty>0';
+    EXCEPTION WHEN check_violation THEN
+        -- Expected
+    END;
+
+    -- Valid insert with new fields
+    INSERT INTO offering_service_component (tenant_id, offering_id, service_spec_id, mandatory_flag, min_qty, max_qty)
+    VALUES (v_tenant_id, v_offering_id, v_service_spec_2, FALSE, 0, 5);
+
     RAISE NOTICE 'All tests for 004 passed successfully.';
 END;
 $$;
