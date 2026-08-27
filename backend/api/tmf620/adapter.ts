@@ -40,13 +40,12 @@ export class TMF620Adapter {
 
     static mapPriceType(calculationType: string): string {
         // TMF620 common values: recurring, oneTime, usage, tariff
+        // The internal model currently lacks information to distinguish recurring from one-time flat charges.
         switch (calculationType.toUpperCase()) {
-            case 'FLAT':
-                return 'recurring';
             case 'PERCENTAGE':
                 return 'tariff';
             default:
-                return 'oneTime';
+                return 'oneTime'; // Safest fallback
         }
     }
 
@@ -55,9 +54,7 @@ export class TMF620Adapter {
             id: internal.id,
             href: `${this.getBaseUrl()}/productCatalogManagement/v5/productOfferingPrice/${internal.id}`,
             name: internal.charge_name,
-            description: internal.resolution_source 
-                ? `Pricing for ${internal.charge_name} (Resolved via ${internal.resolution_source})`
-                : `Pricing for ${internal.charge_name}`,
+            description: `Pricing for ${internal.charge_name}`,
             priceType: this.mapPriceType(internal.calculation_type),
             price: {
                 value: Number(internal.amount),

@@ -113,7 +113,7 @@ describe('TMF620 Adapter Layer', () => {
             valid_to: undefined
         };
 
-        it('1, 5, 9, 11: No context -> base price, internal fields do not leak, old tests pass', async () => {
+        it('1, 5, 9, 11, 12, 13, 14: No context -> base price, internal fields do not leak, old tests pass', async () => {
             (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(mockInternalRate);
 
             const res = await request(app)
@@ -130,8 +130,15 @@ describe('TMF620 Adapter Layer', () => {
             // Verify mapping
             expect(res.body).toHaveProperty('id', 'rate-789');
             expect(res.body).toHaveProperty('name', 'Monthly Data Charge');
-            expect(res.body).toHaveProperty('description', 'Pricing for Monthly Data Charge (Resolved via CATALOGUE_RATE)');
-            expect(res.body).toHaveProperty('priceType', 'recurring'); // FLAT mapped to recurring
+            
+            // Check that resolution_source DOES NOT appear in description
+            expect(res.body.description).not.toContain('CATALOGUE_RATE');
+            expect(res.body).toHaveProperty('description', 'Pricing for Monthly Data Charge');
+            
+            // FLAT mapped to oneTime (the default fallback since we removed FLAT -> recurring to be safe)
+            // Wait, my mapping maps PERCENTAGE to tariff, and everything else to oneTime.
+            expect(res.body).toHaveProperty('priceType', 'oneTime');
+            
             expect(res.body).toHaveProperty('price');
             expect(res.body.price).toHaveProperty('value', 15.5);
             expect(res.body.price).toHaveProperty('unit', 'USD');
@@ -141,6 +148,9 @@ describe('TMF620 Adapter Layer', () => {
 
             // Internal fields should not leak
             expect(res.body).not.toHaveProperty('tenant_id');
+            expect(res.body).not.toHaveProperty('charge_spec_id');
+            expect(res.body).not.toHaveProperty('market_id');
+            expect(res.body).not.toHaveProperty('currency_code');
             expect(res.body).not.toHaveProperty('amount');
             expect(res.body).not.toHaveProperty('resolution_source');
             expect(res.body).not.toHaveProperty('calculation_type');
@@ -160,7 +170,7 @@ describe('TMF620 Adapter Layer', () => {
                 mockTenantId, 'rate-789', undefined, undefined, 'mkt-1', undefined
             );
             expect(res.body.price.value).toBe(10.0);
-            expect(res.body.description).toContain('Resolved via MARKET');
+            expect(res.body.description).not.toContain('MARKET');
         });
 
         it('3. Account context -> account override', async () => {
@@ -176,7 +186,7 @@ describe('TMF620 Adapter Layer', () => {
                 mockTenantId, 'rate-789', undefined, 'acc-1', undefined, undefined
             );
             expect(res.body.price.value).toBe(8.0);
-            expect(res.body.description).toContain('Resolved via ACCOUNT');
+            expect(res.body.description).not.toContain('ACCOUNT');
         });
 
         it('4. Subscriber context -> subscriber override', async () => {
@@ -193,10 +203,10 @@ describe('TMF620 Adapter Layer', () => {
                 mockTenantId, 'rate-789', 'sub-1', undefined, undefined, new Date(effectiveDate)
             );
             expect(res.body.price.value).toBe(5.0);
-            expect(res.body.description).toContain('Resolved via SUBSCRIBER');
+            expect(res.body.description).not.toContain('SUBSCRIBER');
         });
 
-        it('6, 7, 8. Correct priceType mapping (PERCENTAGE -> tariff), Currency, Validity (with endDateTime)', async () => {
+        it('6, 7, 8. Correct priceType mapping (PERCENTAGE -> tariff, other -> oneTime), Currency, Validity', async () => {
             const tariffRate = { 
                 ...mockInternalRate, 
                 calculation_type: 'PERCENTAGE',
@@ -212,9 +222,61 @@ describe('TMF620 Adapter Layer', () => {
             expect(res.body.priceType).toBe('tariff');
             expect(res.body.price.unit).toBe('EUR');
             expect(res.body.validFor.endDateTime).toBe('2024-01-01T00:00:00.000Z');
+            
+            // Re-test with FLAT calculation type to verify fallback
+            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue({
+                ...mockInternalRate,
+                calculation_type: 'FLAT'
+            });
+            const resFlat = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789')
+                .set('x-tenant-id', mockTenantId);
+            expect(resFlat.body.priceType).toBe('oneTime');
+            
+            // Re-test with unknown calculation type to verify fallback
+            (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue({
+                ...mockInternalRate,
+                calculation_type: 'UNKNOWN'
+            });
+            const resUnknown = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789')
+                .set('x-tenant-id', mockTenantId);
+            expect(resUnknown.body.priceType).toBe('oneTime');
+        });
+        
+        it('7. Invalid effectiveAt -> HTTP 400', async () => {
+            const res = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789?effectiveAt=hello')
+                .set('x-tenant-id', mockTenantId);
+            expect(res.status).toBe(400);
+            expect(res.body.error).toContain('Invalid effectiveAt');
+        });
+        
+        it('8. Empty subscriberId -> HTTP 400', async () => {
+            const res = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789?subscriberId=   ')
+                .set('x-tenant-id', mockTenantId);
+            expect(res.status).toBe(400);
+            expect(res.body.error).toContain('subscriberId must be a non-empty string');
+        });
+        
+        it('9. Empty accountId -> HTTP 400', async () => {
+            const res = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789?accountId=')
+                .set('x-tenant-id', mockTenantId);
+            expect(res.status).toBe(400);
+            expect(res.body.error).toContain('accountId must be a non-empty string');
+        });
+        
+        it('10. Empty marketId -> HTTP 400', async () => {
+            const res = await request(app)
+                .get('/productCatalogManagement/v5/productOfferingPrice/rate-789?marketId=  ')
+                .set('x-tenant-id', mockTenantId);
+            expect(res.status).toBe(400);
+            expect(res.body.error).toContain('marketId must be a non-empty string');
         });
 
-        it('10. Tenant isolation is enforced', async () => {
+        it('10b. Tenant isolation is enforced', async () => {
             (ProductCatalogService.prototype.getProductOfferingPriceById as jest.Mock).mockResolvedValue(null);
             
             // Simulating a case where tenant does not own the rate ID

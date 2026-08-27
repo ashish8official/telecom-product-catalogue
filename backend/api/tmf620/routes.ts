@@ -74,15 +74,33 @@ tmf620Router.get('/productOffering/:id', async (req: Request, res: Response) => 
     }
 });
 
+// Helper for context param validation
+const validateContextParam = (val: any, paramName: string) => {
+    if (val !== undefined) {
+        if (typeof val !== 'string' || val.trim().length === 0) {
+            throw new Error(`${paramName} must be a non-empty string`);
+        }
+        return val.trim();
+    }
+    return undefined;
+};
+
 // GET /productCatalogManagement/v5/productOfferingPrice
 tmf620Router.get('/productOfferingPrice', async (req: Request, res: Response) => {
     try {
         const tenantId = getTenantId(req);
         
-        const subscriberId = req.query.subscriberId as string | undefined;
-        const accountId = req.query.accountId as string | undefined;
-        const marketId = req.query.marketId as string | undefined;
-        const effectiveAt = req.query.effectiveAt ? new Date(req.query.effectiveAt as string) : undefined;
+        const subscriberId = validateContextParam(req.query.subscriberId, 'subscriberId');
+        const accountId = validateContextParam(req.query.accountId, 'accountId');
+        const marketId = validateContextParam(req.query.marketId, 'marketId');
+        
+        let effectiveAt: Date | undefined;
+        if (req.query.effectiveAt) {
+            effectiveAt = new Date(req.query.effectiveAt as string);
+            if (isNaN(effectiveAt.getTime())) {
+                return res.status(400).json({ error: 'Invalid effectiveAt. Must be a valid ISO-8601 format.' });
+            }
+        }
         
         const prices = await catalogService.getProductOfferingPrices(tenantId, subscriberId, accountId, marketId, effectiveAt);
         res.json(prices.map(price => TMF620Adapter.mapToProductOfferingPrice(price)));
@@ -97,10 +115,17 @@ tmf620Router.get('/productOfferingPrice/:id', async (req: Request, res: Response
     try {
         const tenantId = getTenantId(req);
 
-        const subscriberId = req.query.subscriberId as string | undefined;
-        const accountId = req.query.accountId as string | undefined;
-        const marketId = req.query.marketId as string | undefined;
-        const effectiveAt = req.query.effectiveAt ? new Date(req.query.effectiveAt as string) : undefined;
+        const subscriberId = validateContextParam(req.query.subscriberId, 'subscriberId');
+        const accountId = validateContextParam(req.query.accountId, 'accountId');
+        const marketId = validateContextParam(req.query.marketId, 'marketId');
+        
+        let effectiveAt: Date | undefined;
+        if (req.query.effectiveAt) {
+            effectiveAt = new Date(req.query.effectiveAt as string);
+            if (isNaN(effectiveAt.getTime())) {
+                return res.status(400).json({ error: 'Invalid effectiveAt. Must be a valid ISO-8601 format.' });
+            }
+        }
 
         const price = await catalogService.getProductOfferingPriceById(tenantId, req.params.id as string, subscriberId, accountId, marketId, effectiveAt);
         if (!price) {
