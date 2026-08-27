@@ -114,7 +114,16 @@ This section represents our engine's own internal domain and is explicitly *not*
   * **Key Fields**: tenant_id.
   * **FK**: charge_specification_id → charge_specification, tax_configuration_id → tax_configuration (composite tenant-safe FKs to enforce strict isolation).
   * **Constraint**: Unique mapping per charge specification and tax configuration.
-* **`journal_configuration` & `journal_mapping`**: Ledger and GL mappings for accounting output.
+* **`journal_configuration`**: Ledger/GL definitions.
+  * **Purpose**: Defines standard accounting GL codes used for financial reporting. Does NOT perform posting or calculate debits/credits.
+  * **Key Fields**: gl_code, gl_description, tenant_id.
+  * **PK**: id.
+  * **Constraint**: `gl_code` must be unique per `tenant_id`.
+* **`journal_mapping`**: Attaching GL codes to charges.
+  * **Purpose**: Maps a specific GL code to a `charge_specification`. A charge may have multiple accounting mappings if needed.
+  * **Key Fields**: tenant_id.
+  * **FK**: charge_specification_id → charge_specification, journal_configuration_id → journal_configuration (composite tenant-safe FKs to enforce strict isolation).
+  * **Constraint**: Unique mapping per charge specification and journal configuration.
 
 ---
 
