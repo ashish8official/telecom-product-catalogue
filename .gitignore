@@ -1,0 +1,32 @@
+# Environment variables (Critical for security)
+.env
+.env.*
+!.env.example
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+.docker/
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+pgdata/
+
+# Application logs
+logs/
+*.log
