@@ -41,6 +41,74 @@ tmf620Router.get('/productSpecification/:id', async (req: Request, res: Response
     }
 });
 
+// Helper to extract catalogue version context
+const getCatalogueVersionId = (req: Request) => {
+    const versionId = req.headers['x-catalogue-version-id'];
+    if (!versionId || typeof versionId !== 'string') {
+        throw new Error('x-catalogue-version-id header is required for write operations');
+    }
+    return versionId;
+};
+
+// POST /productCatalogManagement/v5/productSpecification
+tmf620Router.post('/productSpecification', async (req: Request, res: Response) => {
+    try {
+        const tenantId = getTenantId(req);
+        const versionId = getCatalogueVersionId(req);
+        const payload = req.body;
+        
+        if (!payload.name) {
+            return res.status(400).json({ error: 'name is required' });
+        }
+        
+        const internalSpec = {
+            spec_name: payload.name,
+            spec_code: payload.name.toUpperCase().replace(/\s+/g, '_'),
+            status: payload.lifecycleStatus || 'ACTIVE',
+            effective_from: payload.validFor?.startDateTime ? new Date(payload.validFor.startDateTime) : undefined,
+            effective_to: payload.validFor?.endDateTime ? new Date(payload.validFor.endDateTime) : undefined
+        };
+        
+        const created = await catalogService.createProductSpecification(tenantId, versionId, internalSpec);
+        res.status(201).json(TMF620Adapter.mapToProductSpecification(created));
+    } catch (error: any) {
+        console.error("API Error:", error);
+        const code = error.message && error.message.includes('Modification denied') ? 409 : 400;
+        res.status(code).json({ error: error.message || String(error) });
+    }
+});
+
+// PATCH /productCatalogManagement/v5/productSpecification/{id}
+tmf620Router.patch('/productSpecification/:id', async (req: Request, res: Response) => {
+    try {
+        const tenantId = getTenantId(req);
+        const versionId = getCatalogueVersionId(req);
+        const payload = req.body;
+        
+        const updateSpec: any = {};
+        if (payload.name) {
+            updateSpec.spec_name = payload.name;
+        }
+        if (payload.lifecycleStatus) {
+            updateSpec.status = payload.lifecycleStatus;
+        }
+        if (payload.validFor) {
+            if (payload.validFor.startDateTime) updateSpec.effective_from = new Date(payload.validFor.startDateTime);
+            if (payload.validFor.endDateTime) updateSpec.effective_to = new Date(payload.validFor.endDateTime);
+        }
+        
+        const updated = await catalogService.updateProductSpecification(tenantId, req.params.id as string, versionId, updateSpec);
+        if (!updated) {
+            return res.status(404).json({ error: 'ProductSpecification not found' });
+        }
+        res.json(TMF620Adapter.mapToProductSpecification(updated));
+    } catch (error: any) {
+        console.error("API Error:", error);
+        const code = error.message && error.message.includes('Modification denied') ? 409 : 400;
+        res.status(code).json({ error: error.message || String(error) });
+    }
+});
+
 // GET /productCatalogManagement/v5/productOffering
 tmf620Router.get('/productOffering', async (req: Request, res: Response) => {
     try {
@@ -71,6 +139,63 @@ tmf620Router.get('/productOffering/:id', async (req: Request, res: Response) => 
     } catch (error: any) {
         console.error("API Error:", error);
         res.status(400).json({ error: error.message || String(error) });
+    }
+});
+
+// POST /productCatalogManagement/v5/productOffering
+tmf620Router.post('/productOffering', async (req: Request, res: Response) => {
+    try {
+        const tenantId = getTenantId(req);
+        const versionId = getCatalogueVersionId(req);
+        const payload = req.body;
+        
+        if (!payload.name) return res.status(400).json({ error: 'name is required' });
+        if (!payload.productSpecification || !payload.productSpecification.id) {
+            return res.status(400).json({ error: 'productSpecification.id is required' });
+        }
+        
+        const internalOffering = {
+            offering_name: payload.name,
+            offering_code: payload.name.toUpperCase().replace(/\s+/g, '_'),
+            product_specification_id: payload.productSpecification.id,
+            // Defaults for fields TMF620 doesn't strictly provide natively
+            offering_type: 'BASE',
+            service_type: 'PREPAID'
+        };
+        
+        const created = await catalogService.createProductOffering(tenantId, versionId, internalOffering);
+        res.status(201).json(TMF620Adapter.mapToProductOffering(created));
+    } catch (error: any) {
+        console.error("API Error:", error);
+        const code = error.message && error.message.includes('Modification denied') ? 409 : 400;
+        res.status(code).json({ error: error.message || String(error) });
+    }
+});
+
+// PATCH /productCatalogManagement/v5/productOffering/{id}
+tmf620Router.patch('/productOffering/:id', async (req: Request, res: Response) => {
+    try {
+        const tenantId = getTenantId(req);
+        const versionId = getCatalogueVersionId(req);
+        const payload = req.body;
+        
+        const updateOffering: any = {};
+        if (payload.name) {
+            updateOffering.offering_name = payload.name;
+        }
+        if (payload.productSpecification && payload.productSpecification.id) {
+            updateOffering.product_specification_id = payload.productSpecification.id;
+        }
+        
+        const updated = await catalogService.updateProductOffering(tenantId, req.params.id as string, versionId, updateOffering);
+        if (!updated) {
+            return res.status(404).json({ error: 'ProductOffering not found' });
+        }
+        res.json(TMF620Adapter.mapToProductOffering(updated));
+    } catch (error: any) {
+        console.error("API Error:", error);
+        const code = error.message && error.message.includes('Modification denied') ? 409 : 400;
+        res.status(code).json({ error: error.message || String(error) });
     }
 });
 
