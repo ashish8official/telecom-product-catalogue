@@ -22,4 +22,16 @@ export class ProductCatalogService {
         if (!tenantId) throw new Error('tenantId is required');
         return await productRepo.getProductOfferingById(tenantId, id);
     }
+
+    async getProductOfferingPrices(tenantId: string): Promise<any[]> {
+        if (!tenantId) throw new Error('tenantId is required');
+        // TODO: price_override resolution is not implemented yet.
+        return await productRepo.getResolvedOfferingPrices(tenantId);
+    }
+
+    async getProductOfferingPriceById(tenantId: string, id: string): Promise<any | null> {
+        if (!tenantId) throw new Error('tenantId is required');
+        // TODO: price_override resolution is not implemented yet.
+        return await productRepo.getResolvedOfferingPriceById(tenantId, id);
+    }
 }

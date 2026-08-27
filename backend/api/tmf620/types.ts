@@ -34,3 +34,22 @@ export interface TMFProductOffering {
     productSpecification: TMFProductSpecificationRef;
     // Note: No tenant_id, catalogue_version_id, offering_type, service_type are present here.
 }
+
+export interface TMFMoney {
+    value: number;
+    unit: string;
+}
+
+export interface TMFProductOfferingPrice {
+    id: string;
+    href: string;
+    name: string;
+    description?: string;
+    priceType: string;
+    price: TMFMoney;
+    recurringChargePeriod?: string;
+    validFor?: {
+        startDateTime: string;
+        endDateTime?: string;
+    };
+}

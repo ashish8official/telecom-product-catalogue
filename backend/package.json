@@ -7,13 +7,15 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "start": "ts-node server.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "pg": "^8.23.0"
   },
@@ -26,6 +28,7 @@
     "jest": "^30.4.2",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.12",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }
 }

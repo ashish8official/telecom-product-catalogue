@@ -1,5 +1,5 @@
-import { InternalProductSpecification, InternalProductOffering } from '../../repositories/productRepository';
-import { TMFProductSpecification, TMFProductOffering } from './types';
+import { InternalProductSpecification, InternalProductOffering, InternalResolvedRate } from '../../repositories/productRepository';
+import { TMFProductSpecification, TMFProductOffering, TMFProductOfferingPrice } from './types';
 
 export class TMF620Adapter {
     static getBaseUrl(): string {
@@ -35,6 +35,24 @@ export class TMF620Adapter {
                 ...(specName ? { name: specName } : {})
             }
             // tenant_id, catalogue_version_id, offering_type, service_type are strictly omitted here to prevent leaking internal shapes
+        };
+    }
+
+    static mapToProductOfferingPrice(internal: InternalResolvedRate): TMFProductOfferingPrice {
+        return {
+            id: internal.id,
+            href: `${this.getBaseUrl()}/productCatalogManagement/v5/productOfferingPrice/${internal.id}`,
+            name: internal.charge_name,
+            description: `Pricing for ${internal.charge_name}`,
+            priceType: internal.calculation_type, // Typically recurring, one_time, etc.
+            price: {
+                value: Number(internal.amount), // ensure numeric
+                unit: internal.currency_code
+            },
+            validFor: {
+                startDateTime: new Date(internal.valid_from).toISOString(),
+                ...(internal.valid_to ? { endDateTime: new Date(internal.valid_to).toISOString() } : {})
+            }
         };
     }
 }
