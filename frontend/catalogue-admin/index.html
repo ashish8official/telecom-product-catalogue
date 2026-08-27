@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catalogue Admin - Internal BSS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .badge-draft { @apply bg-gray-200 text-gray-800; }
+        .badge-approved { @apply bg-blue-100 text-blue-800; }
+        .badge-released { @apply bg-green-100 text-green-800; }
+        .badge-retired { @apply bg-red-100 text-red-800; }
+        .badge { @apply px-2 py-1 rounded text-xs font-bold uppercase; }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen flex flex-col font-sans">
+    
+    <header class="bg-slate-900 text-white p-4 shadow-md flex justify-between items-center">
+        <h1 class="text-xl font-bold tracking-tight">Telecom Catalogue Admin <span class="text-xs text-slate-400 font-normal ml-2">Internal Framework</span></h1>
+        <div class="text-sm">Tenant: <span id="tenant-display" class="font-mono text-blue-300"></span></div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar: Catalogues & Versions -->
+        <aside class="w-1/4 bg-white border-r border-slate-200 flex flex-col h-full overflow-y-auto">
+            <div class="p-4 bg-slate-100 border-b border-slate-200 font-semibold text-slate-600">
+                Catalogues
+            </div>
+            <div id="catalogues-container" class="flex-1 p-2">
+                <!-- Populated by JS -->
+                <div class="text-center text-slate-400 mt-10">Loading...</div>
+            </div>
+        </aside>
+
+        <!-- Main Content: Offerings & Specs -->
+        <main class="flex-1 flex flex-col h-full bg-slate-50">
+            <header class="p-6 bg-white border-b border-slate-200 shadow-sm min-h-[100px]">
+                <h2 id="version-title" class="text-2xl font-bold text-slate-800">Select a Catalogue Version</h2>
+                <div id="version-subtitle" class="text-slate-500 mt-1">To view offerings and hierarchy</div>
+            </header>
+
+            <div class="flex-1 overflow-y-auto p-6">
+                <div id="offerings-container" class="grid grid-cols-1 gap-6">
+                    <!-- Populated by JS -->
+                    <div class="text-center text-slate-400 mt-10" id="empty-state">
+                        No version selected.
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

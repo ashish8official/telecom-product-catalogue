@@ -64,6 +64,60 @@ export class ProductRepository {
         return result.rows[0] || null;
     }
 
+    async getCatalogues(tenantId: string): Promise<any[]> {
+        const result = await pool.query(
+            'SELECT * FROM catalogue WHERE tenant_id = $1 ORDER BY created_at DESC',
+            [tenantId]
+        );
+        return result.rows;
+    }
+
+    async getCatalogueVersions(tenantId: string, catalogueId: string): Promise<any[]> {
+        const result = await pool.query(
+            'SELECT * FROM catalogue_version WHERE tenant_id = $1 AND catalogue_id = $2 ORDER BY version ASC',
+            [tenantId, catalogueId]
+        );
+        return result.rows;
+    }
+
+    async getOfferingsForVersion(tenantId: string, versionId: string): Promise<any[]> {
+        const query = `
+            SELECT 
+                po.id as offering_id, po.offering_code, po.offering_name, po.offering_type, po.service_type,
+                ps.id as spec_id, ps.spec_code, ps.spec_name,
+                (
+                    SELECT json_agg(
+                        json_build_object(
+                            'charge_id', cs.id,
+                            'charge_code', cs.charge_code,
+                            'charge_name', cs.charge_name,
+                            'priority', cs.charge_priority
+                        )
+                    )
+                    FROM offering_charge_component occ
+                    JOIN charge_specification cs ON occ.charge_spec_id = cs.id
+                    WHERE occ.offering_id = po.id AND occ.tenant_id = po.tenant_id
+                ) as charges,
+                (
+                    SELECT json_agg(
+                        json_build_object(
+                            'service_id', ss.id,
+                            'service_code', ss.service_code,
+                            'service_name', ss.service_name
+                        )
+                    )
+                    FROM offering_service_component osc
+                    JOIN service_specification ss ON osc.service_spec_id = ss.id
+                    WHERE osc.offering_id = po.id AND osc.tenant_id = po.tenant_id
+                ) as services
+            FROM product_offering po
+            JOIN product_specification ps ON po.product_specification_id = ps.id
+            WHERE po.tenant_id = $1 AND po.catalogue_version_id = $2
+        `;
+        const result = await pool.query(query, [tenantId, versionId]);
+        return result.rows;
+    }
+
     async checkCatalogueVersionIsDraft(tenantId: string, catalogueVersionId: string): Promise<boolean> {
         const result = await pool.query(
             'SELECT status FROM catalogue_version WHERE tenant_id = $1 AND id = $2',

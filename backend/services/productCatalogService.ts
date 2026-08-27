@@ -23,6 +23,21 @@ export class ProductCatalogService {
         return await productRepo.getProductOfferingById(tenantId, id);
     }
 
+    async getCatalogues(tenantId: string): Promise<any[]> {
+        if (!tenantId) throw new Error('tenantId is required');
+        return await productRepo.getCatalogues(tenantId);
+    }
+
+    async getCatalogueVersions(tenantId: string, catalogueId: string): Promise<any[]> {
+        if (!tenantId) throw new Error('tenantId is required');
+        return await productRepo.getCatalogueVersions(tenantId, catalogueId);
+    }
+
+    async getOfferingsForVersion(tenantId: string, versionId: string): Promise<any[]> {
+        if (!tenantId) throw new Error('tenantId is required');
+        return await productRepo.getOfferingsForVersion(tenantId, versionId);
+    }
+
     async validateDraftVersion(tenantId: string, catalogueVersionId: string): Promise<void> {
         const isDraft = await productRepo.checkCatalogueVersionIsDraft(tenantId, catalogueVersionId);
         if (!isDraft) {
