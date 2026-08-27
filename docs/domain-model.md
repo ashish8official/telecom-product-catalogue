@@ -41,16 +41,14 @@ This section represents our engine's own internal domain and is explicitly *not*
   * **FK**: product_offering_id → product_offering, charge_specification_id → charge_specification.
 
 ### Pricing & Resolution
-* **`offering_rate`**: The standard pricing for a given charge component.
-  * **Purpose**: The catalogue base rate for a specific charge.
-  * **Key Fields**: amount, rate_code, tenant_id.
-  * **PK**: id.
-  * **FK**: offering_charge_component_id → offering_charge_component.
-* **`price_override`**: Conditional price alterations.
-  * **Purpose**: Modifies price dynamically at runtime (resolved via Subscriber → Account → Market → Catalogue Rate) without mutating the standard `offering_rate`.
-  * **Key Fields**: condition, amount, tenant_id.
-  * **PK**: id.
-  * **FK**: offering_rate_id → offering_rate.
+* **`offering_rate`**: The base cost.
+  * **Key Fields**: amount (`NUMERIC(16,6)`), currency_code, market_id, tenant_id.
+  * **FK**: charge_spec_id → charge_specification, market_id → market_master.
+* **`price_override`**: Entity-specific price modifications.
+  * **Purpose**: Overrides the base offering rate at the SUBSCRIBER, ACCOUNT, or MARKET level. Never mutates the base rate.
+  * **Key Fields**: scope_type, scope_reference_id (opaque identifier), override_amount (`NUMERIC(16,6)`), effective_from, effective_to.
+  * **FK**: offering_rate_id → offering_rate (composite tenant-safe FK).
+  * **Overlap Prevention**: Transactional validation blocks overlapping active overrides for the same scope.
 
 ### Locality & Master Data
 * **`market_master`**: Global market definitions.
