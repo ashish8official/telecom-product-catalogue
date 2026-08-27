@@ -30,6 +30,7 @@ Modern telecom architectures struggle with tightly coupled CRMs, Billing, and Or
 * **🛡️ Bulletproof Immutability:** Released catalogue versions are locked via database triggers. No accidental in-flight mutations.
 * **♾️ Infinite Hierarchies:** Market and Category trees support infinite depth with recursive CTE cycle-detection built right into the schema.
 * **📜 Dynamic Policy Engine:** Attach complex business eligibility rules using deeply integrated JSON-schema validation (via Ajv).
+* **🌍 Realistic Integration Fixture:** Includes a comprehensive African/Indian telecom seed dataset with automated assertions for testing complex hierarchy and pricing rules.
 
 ---
 
@@ -90,7 +91,13 @@ docker-compose up -d
 node run_db_tests.js
 ```
 
-### 3. Start the Server
+### 3. Load Canonical Seed Data (Optional)
+Run the automated integration fixture to populate the database with realistic M2M and Voice plans, and execute the smoke test assertions.
+```bash
+node run_seed_smoke_test.js
+```
+
+### 4. Start the Server
 ```bash
 npm run dev
 # Server is now running on http://localhost:3000
@@ -124,6 +131,7 @@ Dive deeper into the architecture and design decisions:
 - [Domain Model](./docs/domain-model.md) - Internal entity relationship mappings.
 - [Pricing Engine](./docs/pricing-engine.md) - How the deterministic price resolution works.
 - [TMF Alignment](./docs/tmforum-alignment.md) - Mapping internal domains to standard APIs.
+- [Seed Fixture](./docs/seed-fixture.md) - Documentation on the canonical integration testing dataset.
 
 ---
 
