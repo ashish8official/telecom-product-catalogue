@@ -218,6 +218,7 @@ tmf620Router.get('/productOfferingPrice', async (req: Request, res: Response) =>
         const subscriberId = validateContextParam(req.query.subscriberId, 'subscriberId');
         const accountId = validateContextParam(req.query.accountId, 'accountId');
         const marketId = validateContextParam(req.query.marketId, 'marketId');
+        const offeringId = validateContextParam(req.query['productOffering.id'], 'productOffering.id');
         
         let effectiveAt: Date | undefined;
         if (req.query.effectiveAt) {
@@ -227,7 +228,7 @@ tmf620Router.get('/productOfferingPrice', async (req: Request, res: Response) =>
             }
         }
         
-        const prices = await catalogService.getProductOfferingPrices(tenantId, subscriberId, accountId, marketId, effectiveAt);
+        const prices = await catalogService.getProductOfferingPrices(tenantId, subscriberId, accountId, marketId, effectiveAt, offeringId);
         res.json(prices.map(price => TMF620Adapter.mapToProductOfferingPrice(price)));
     } catch (error: any) {
         console.error("API Error:", error);

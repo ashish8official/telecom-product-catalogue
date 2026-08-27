@@ -86,10 +86,11 @@ export class ProductCatalogService {
         subscriberId?: string,
         accountId?: string,
         marketId?: string,
-        effectiveAt?: Date
+        effectiveAt?: Date,
+        offeringId?: string
     ): Promise<InternalResolvedRate[]> {
         if (!tenantId) throw new Error('tenantId is required');
-        return await productRepo.getResolvedOfferingPrices(tenantId, subscriberId, accountId, marketId, effectiveAt);
+        return await productRepo.getResolvedOfferingPrices(tenantId, subscriberId, accountId, marketId, effectiveAt, offeringId);
     }
 
     async getProductOfferingPriceById(

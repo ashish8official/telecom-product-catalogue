@@ -193,9 +193,10 @@ export class ProductRepository {
         subscriberId?: string,
         accountId?: string,
         marketId?: string,
-        effectiveAt?: Date
+        effectiveAt?: Date,
+        offeringId?: string
     ): Promise<InternalResolvedRate[]> {
-        const query = `
+        let query = `
             SELECT 
                 r.id,
                 r.tenant_id,
@@ -212,13 +213,25 @@ export class ProductRepository {
             CROSS JOIN LATERAL resolve_price($1, r.id, $2, $3, $4, COALESCE($5, NOW())) rp
             WHERE r.tenant_id = $1
         `;
-        const result = await pool.query(query, [
+        
+        const params: any[] = [
             tenantId, 
             subscriberId || null, 
             accountId || null, 
             marketId || null, 
             effectiveAt || null
-        ]);
+        ];
+
+        if (offeringId) {
+            query += ` AND c.id IN (
+                SELECT charge_spec_id 
+                FROM offering_charge_component 
+                WHERE offering_id = $6 AND tenant_id = $1
+            )`;
+            params.push(offeringId);
+        }
+
+        const result = await pool.query(query, params);
         return result.rows;
     }
 
