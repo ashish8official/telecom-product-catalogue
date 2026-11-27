@@ -9,6 +9,7 @@ DECLARE
     v_charge_spec_id UUID;
     v_market_id UUID;
     v_market_id_2 UUID;
+    v_offering_id_2 UUID;
 BEGIN
     -- 1. Setup Data
     INSERT INTO catalogue (tenant_id, name) VALUES (v_tenant_id, 'Pricing Test Cat') RETURNING id INTO v_catalogue_id;
@@ -32,22 +33,55 @@ BEGIN
     VALUES (v_tenant_id, 'MKT_2', 'Market 2', 'America/New_York', 'USD') RETURNING id INTO v_market_id_2;
 
 
-    -- 2. Test offering_rate (Unique rate-per-market enforced)
-    INSERT INTO offering_rate (tenant_id, charge_spec_id, market_id, currency_code, amount)
-    VALUES (v_tenant_id, v_charge_spec_id, v_market_id, 'USD', 0.001500);
+    INSERT INTO offering_charge_component (tenant_id, offering_id, charge_spec_id)
+    VALUES (v_tenant_id, v_offering_id, v_charge_spec_id);
+
+    -- 2. Test offering_rate (one rate per offering + charge + market)
+    INSERT INTO offering_rate (tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount)
+    VALUES (v_tenant_id, v_offering_id, v_charge_spec_id, v_market_id, 'USD', 0.001500);
 
     BEGIN
-        INSERT INTO offering_rate (tenant_id, charge_spec_id, market_id, currency_code, amount)
-        VALUES (v_tenant_id, v_charge_spec_id, v_market_id, 'USD', 0.002000);
+        INSERT INTO offering_rate (tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount)
+        VALUES (v_tenant_id, v_offering_id, v_charge_spec_id, v_market_id, 'USD', 0.002000);
         RAISE EXCEPTION 'TEST FAILED: Allowed duplicate rate for the same market';
     EXCEPTION WHEN unique_violation THEN
         -- Expected
     END;
 
     -- Valid for a different market
-    INSERT INTO offering_rate (tenant_id, charge_spec_id, market_id, currency_code, amount)
-    VALUES (v_tenant_id, v_charge_spec_id, v_market_id_2, 'USD', 0.002000);
+    INSERT INTO offering_rate (tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount)
+    VALUES (v_tenant_id, v_offering_id, v_charge_spec_id, v_market_id_2, 'USD', 0.002000);
 
+
+    -- A rate must belong to an offering that actually carries the charge (migration 017)
+    INSERT INTO product_offering (tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
+    VALUES (v_tenant_id, v_version_id, v_product_spec_id, 'PRICING_OFF_2', 'Pricing Off 2', 'BASE', 'PREPAID') RETURNING id INTO v_offering_id_2;
+
+    BEGIN
+        INSERT INTO offering_rate (tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount)
+        VALUES (v_tenant_id, v_offering_id_2, v_charge_spec_id, v_market_id, 'USD', 0.003000);
+        RAISE EXCEPTION 'TEST FAILED: Allowed a rate for a charge the offering does not carry';
+    EXCEPTION WHEN foreign_key_violation THEN
+        -- Expected
+    END;
+
+    -- Two offerings sharing one charge specification can hold different prices in the same market
+    INSERT INTO offering_charge_component (tenant_id, offering_id, charge_spec_id)
+    VALUES (v_tenant_id, v_offering_id_2, v_charge_spec_id);
+
+    INSERT INTO offering_rate (tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount)
+    VALUES (v_tenant_id, v_offering_id_2, v_charge_spec_id, v_market_id, 'USD', 0.003000);
+
+    IF (SELECT count(DISTINCT amount) FROM offering_rate
+         WHERE tenant_id = v_tenant_id AND charge_spec_id = v_charge_spec_id AND market_id = v_market_id) <> 2 THEN
+        RAISE EXCEPTION 'TEST FAILED: Offerings sharing a charge could not hold separate prices';
+    END IF;
+
+    -- Detaching the charge from an offering removes that offering's rates with it
+    DELETE FROM offering_charge_component WHERE tenant_id = v_tenant_id AND offering_id = v_offering_id_2;
+    IF EXISTS (SELECT 1 FROM offering_rate WHERE tenant_id = v_tenant_id AND offering_id = v_offering_id_2) THEN
+        RAISE EXCEPTION 'TEST FAILED: Rates survived the removal of their charge component';
+    END IF;
 
     -- 3. Test offering_market_mapping (EXCLUDE restricts, INCLUDE works)
     INSERT INTO offering_market_mapping (tenant_id, offering_id, market_id, restriction)

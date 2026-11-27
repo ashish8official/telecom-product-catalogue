@@ -1,14 +1,21 @@
 {
-  "name": "backend",
+  "name": "telecom-product-catalogue-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "test": "tests"
-  },
+  "description": "Multi-tenant telecom product catalogue engine with a TMF620 adapter layer",
+  "main": "server.ts",
   "scripts": {
+    "start": "ts-node --transpile-only server.ts",
+    "dev": "ts-node server.ts",
+    "typecheck": "tsc --noEmit -p .",
     "test": "jest",
-    "start": "ts-node server.ts"
+    "test:db": "ts-node --transpile-only scripts/db.ts test --test",
+    "db:migrate": "ts-node --transpile-only scripts/db.ts migrate",
+    "db:rollback": "ts-node --transpile-only scripts/db.ts rollback",
+    "db:status": "ts-node --transpile-only scripts/db.ts status",
+    "db:baseline": "ts-node --transpile-only scripts/db.ts baseline",
+    "db:seed": "ts-node --transpile-only scripts/db.ts seed",
+    "db:verify-rollback": "ts-node --transpile-only scripts/db.ts verify-rollback",
+    "smoke": "ts-node --transpile-only scripts/smoke.ts"
   },
   "keywords": [],
   "author": "",
@@ -19,7 +26,8 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -33,5 +41,8 @@
     "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

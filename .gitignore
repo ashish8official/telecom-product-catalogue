@@ -34,3 +34,6 @@ logs/
 # Dependencies & build output
 node_modules/
 dist/
+
+# Local database backups (pg_dump output)
+database/backups/

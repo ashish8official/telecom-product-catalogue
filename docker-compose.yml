@@ -1,17 +1,42 @@
-version: '3.8'
-
+# Local stack: PostgreSQL + the catalogue API (with both UIs).
+#   cp .env.example .env && docker compose up --build
+# The API container applies pending migrations on start. Load demo data with:
+#   docker compose exec api npm run db:seed
 services:
   postgres:
     image: postgres:16-alpine
     container_name: telecom_catalogue_db
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
       POSTGRES_DB: catalogue_db
     ports:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d catalogue_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      PGDATABASE: catalogue_db
+      PORT: "3000"
+      API_KEYS: ${API_KEYS:-}
+    ports:
+      - "${APP_PORT:-3000}:3000"
 
 volumes:
   pgdata:

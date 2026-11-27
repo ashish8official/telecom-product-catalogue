@@ -1,54 +1,38 @@
-# Seed Data Fixture (Task 017A)
+# Seed Fixture
 
-This document describes the canonical seed dataset used for integration testing the Telecom Product Catalogue Engine.
+`database/seeds/017_realistic_telecom_seed.sql` is the canonical demo and integration fixture. Load it with `npm run db:seed`. The Jest suites load it into `catalogue_test` automatically.
 
-## 1. Purpose
-The realistic telecom seed (`database/seeds/017_realistic_telecom_seed.sql`) exists to provide a stable, canonical integration-test fixture for the Resolution Engine. It contains a full web of product configurations reflecting a multi-market African and Indian telecom scenario.
+## Safety and idempotency
 
-This data is used to test **configuration state**, verifying that limits, exclusions, pricing relationships, and eligibility boundaries can be correctly established in the schema. **It does not perform runtime resolution.**
+- Refuses to run unless the database is `catalogue_db`, `catalogue_test` or the rollback scratch database.
+- Uses two fixed tenant ids and deletes only their rows before inserting, so it can be re-run at any time. Released content is removed by deleting the whole catalogue, which the immutability guards allow.
 
-## 2. Test & Local Database Safety
-**Safety Guard:** The seed SQL script contains an explicit environment safety block. It executes `SELECT current_database()` and will `RAISE EXCEPTION` and halt if the target database is not named `catalogue_db` or `catalogue_test`.
+## Tenant `17000000-0000-4000-a000-000000000000`: Afrindia Telecom
 
-**This guarantees the seed script can never accidentally wipe a staging or production database.**
+**Markets**: India; Africa (GROUP, not priced) › Nigeria › Lagos (CITY); Africa › Kenya; Africa › South Africa.
 
-## 3. Idempotency & Reset Behavior
-The seed uses a fixed, predictable `tenant_id` (`17000000-0000-4000-a000-000000000000`) for all seeded records.
-Before inserting any new data, the script explicitly deletes all records associated with this specific `tenant_id` in reverse dependency order.
+**Global Telecom Catalogue**
 
-This ensures:
-1. The script can be run an infinite number of times.
-2. It will never create duplicate markets, offerings, rates, or relationships.
-3. It resets the environment to a perfectly pristine state every time it is executed.
+| Version | Status | Content |
+|---|---|---|
+| v1 | RELEASED (published) | M2M Basic, M2M Premium, Static IP add-on, Prepaid Voice |
+| v2 | DRAFT | M2M Basic re-priced to 1399 NGN, new M2M Unlimited |
 
-## 4. Market-Code Convention
-The script adheres strictly to the following canonical `market_code` convention across all tables:
-* `IND` (India)
-* `AFR` (Africa, parent)
-* `NGA` (Nigeria)
-* `LAGOS` (Lagos)
-* `KEN` (Kenya)
-* `ZAF` (South Africa)
+Scenarios the data exercises:
 
-## 5. Canonical Telecom Scenario
-The seed represents a telecom selling M2M and Voice solutions:
-* **M2M Basic Plan** (BASE) - with recurring monthly charges that vary by market.
-* **Static IP Add-on** (ADDON) - restricted (EXCLUDE) in South Africa, and explicitly REQUIRES the M2M Basic Plan.
-* **Prepaid Voice** (STANDALONE).
+| Scenario | Data |
+|---|---|
+| Per-offering pricing of a shared charge | M2M Basic 1299 NGN vs. M2M Premium 2499 NGN, both on `RC_M2M_MONTHLY` |
+| Recurring + one-time charges | M2M Basic: monthly fee + `OT_ACTIVATION` |
+| Percentage discount | M2M Premium: `DISC_LAUNCH` −10% in Nigeria → 2249.10 NGN net |
+| City inherits country rate and VAT | Lagos has no rates; Nigeria's rates and 7.5% VAT apply |
+| Override precedence on M2M Basic / Nigeria | subscriber `SUB-NGA-001` 999 · account `ACC-CORP-01` 1150 · market override on Lagos 1199 · catalogue 1299 |
+| Market restriction | Static IP EXCLUDE South Africa |
+| Relationships | Static IP REQUIRES M2M Basic; M2M Basic UPGRADE → M2M Premium |
+| Eligibility policy | M2M plans need `{"account_category": "CORPORATE"}` (schema rejects other keys) |
+| Tax and GL | VAT/GST per country on every charge; GL per revenue stream, discounts to a contra account |
+| Presentation | categories IoT & M2M › Add-ons, Consumer |
 
-## 6. What the Smoke Tests Prove (Configuration Verification)
-The `backend/run_seed_smoke_test.js` script asserts that:
-* The Nigeria Base Rate is correctly configured at exactly `1299 NGN`.
-* India is `699 INR`, Kenya is `499 KES`, South Africa is `299 ZAR`.
-* A subscriber override exists for `999 NGN` in Nigeria, and its insertion does not mutate the original `1299 NGN` base rate.
-* The ZAF market explicitly contains an `EXCLUDE` restriction for the Static IP offering.
-* The M2M_STATIC_IP offering explicitly `REQUIRES` M2M_BASE.
-* A B2B policy enforcing `{"account_category": "CORPORATE"}` is correctly mapped to M2M_BASE.
-* Financial metadata (7.5% Tax, GL `4000-REV-M2M`) is accurately bound to the M2M recurring charge.
+## Tenant `27000000-0000-4000-a000-000000000000`: Northwind Mobile
 
-## 7. What the Smoke Tests Intentionally Do NOT Prove
-* They **do not** test dynamic runtime tax calculation (e.g., compounding tax).
-* They **do not** evaluate whether a specific external user's JSON payload satisfies the policy schema.
-* They **do not** prove full runtime resolution engine logic.
-
-They simply prove the database integrity, referential validity, and configurability of the catalog.
+One released catalogue with one offering (Unlimited 5G, 65 USD/month). It exists to prove isolation: neither tenant can see the other's data.

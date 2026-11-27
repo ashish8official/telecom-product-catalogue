@@ -1,53 +1,46 @@
-# Resolution Engine (Task 018)
+# Resolution Engine
 
-The Resolution Engine is the core deterministic business logic layer responsible for taking the internal domain schema and calculating exact behavior for a given execution context.
+The resolution engine turns the configuration into a concrete answer for one context: *can this customer buy this offering here, now, and what will it cost?* It only reads, never writes. Each capability is an isolated, independently tested module. `services/pricingService.quoteOffering` composes them; there is no single giant `resolve()`.
 
-## Architectural Model
-Each capability remains isolated and independently testable. We do NOT merge this into one giant `resolve()` function. 
+| Step | Module | Notes |
+|---|---|---|
+| Market eligibility | `services/marketResolver.ts` | Hierarchy-aware; see [market-resolution.md](market-resolution.md) |
+| Policy | `services/resolve_policy.ts` | JSON rules vs. runtime context; see [policy-engine.md](policy-engine.md) |
+| Charge stacking | `services/apply_charge_stacking.ts` | priority ASC, id tie-break; OVERRIDE clears |
+| Rate selection | `pricingService.nearestRate` | the market's own rate, else the nearest ancestor's |
+| Overrides | `resolve_price()` (SQL, migrations 016/020) | subscriber › account › market (with ancestors) › catalogue |
+| Calculation | `pricingService` + `domain/money.ts` | FLAT, or PERCENTAGE of the preceding subtotal |
+| Tax | `services/resolve_tax.ts` | exact market, then ancestors, then generic; all matches apply |
+| GL | `services/resolve_journal.ts` | mapped GL codes; never posts entries |
 
-1. `resolve_price()` (Existing PGSQL Function) - Fetches the raw catalogue rate or account override.
-2. `resolve_policy()` (TS Service) - Evaluates eligibility rules against a supplied JSON context.
-3. `apply_charge_stacking()` (TS Service) - Orders and filters charges according to priority and stacking rules.
-4. `resolve_tax()` (TS Service) - Identifies the correct tax configuration matching the market hierarchy.
-5. `resolve_journal()` (TS Service) - Fetches GL accounts for financial reporting.
+## ResolutionContext
 
-*Note on Unit Credits:* Unit credits represent catalogue-defined benefits, not real-time balances. Real-time consumption is tracked in the external SPR/Charging system.
-
-## 1. ResolutionContext
-A unified object passed to resolvers:
 ```typescript
-export interface ResolutionContext {
+interface ResolutionContext {
     tenant_id: string;
     offering_id: string;
     market_id?: string;
     subscriber_id?: string;
     account_id?: string;
     effective_at: Date;
-    context_json?: Record<string, any>;
+    context_json?: Record<string, any>;   // e.g. { "account_category": "CORPORATE" }
 }
 ```
 
-## 2. Policy Resolution (`resolve_policy`)
-Matches configured `policy_rule` JSON against the runtime `context_json`.
-- **Timezone-aware:** Converts `effective_at` to the market's specific IANA timezone (e.g. `Africa/Lagos`) when evaluating `time_window` boundaries.
-- **Evaluation modes:** Supports `ALL` (every rule must pass) and `ANY` (at least one rule must pass).
+## Quote result
 
-## 3. Charge Stacking (`apply_charge_stacking`)
-Orders applicable charge specifications deterministically:
-1. `charge_priority` ASC (10 evaluates before 50)
-2. `charge_specification.id` ASC (Deterministic tie-breaker).
-- **Semantics:** If an `OVERRIDE` charge is processed, it completely clears lower/equal priority charges accumulated in the stack before it.
+`POST /api/internal/quote` returns:
 
-## 4. Tax Resolution (`resolve_tax`)
-Matches a charge to tax mappings.
-- **Fallback sequence:**
-  1. Specific exact market match.
-  2. Parent market match (recursively up the market tree).
-  3. Generic configuration (tax mapped with no specific market constraints).
+- `sellable`: true only when the market allows the offering, every policy passes, and every charge has a rate.
+- `eligibility`, with the market that decided it.
+- `policy`, with per-rule checks.
+- `lines`: one per stacked charge, carrying the catalogue amount, resolved amount and its source, any percentage base, net, taxes, gross and GL.
+- `totals` per currency, charge type and period.
+- `relationships` (REQUIRES / EXCLUDES / UPGRADE) for the order system to enforce across a basket.
+- `warnings`, e.g. a draft (provisional) version, a non-pricing market, or a missing rate.
 
-## 5. Journal Resolution (`resolve_journal`)
-Returns the General Ledger `gl_code` mapped to the charge for external billing ingestion. Doesn't mutate or post real ledger entries.
+## Fallback semantics
 
-## 6. Error and Fallback Semantics
-- **No Mapping:** Resolvers return clean structured empty states (e.g., `[]`, `{ passed: true }`) when no explicit restrictions exist, maintaining the "default allow" principle.
-- **Ambiguities:** Discount ordering requires future integration. Conceptually, Discount operates after Base Price but before Tax. No mutation of the original rate table is permitted during calculation.
+- No mapping anywhere means a clean empty or allow result (`[]`, `passed: true`), keeping the default-allow principle.
+- A charge with no rate in the market or its ancestors becomes a `NO_RATE` line with a warning. The quote is then not sellable; it does not fail.
+- Unit credits are catalogue-defined benefits, not balances. Real-time consumption stays in the external charging/SPR system.

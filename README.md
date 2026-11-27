@@ -1,167 +1,143 @@
-<div align="center">
+# Telecom Product Catalogue Engine
 
-# 🚀 Telecom Product Catalogue Engine
+A standalone, multi-tenant, multi-market product catalogue for telecom BSS. It defines what can be sold, to whom, where and for how much. It exposes that over the **TM Forum TMF620 v5** API, so any CRM, order-management or billing system can consume it without knowing the internal schema.
 
-**Enterprise-Grade. Multi-Tenant. TMF620 Compliant. Plug-and-Play.**
+It does not track subscribers, usage or provisioning. Those belong to other systems.
 
-[![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)](https://nodejs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
-[![TM Forum](https://img.shields.io/badge/TMF620-v5.0.0-orange.svg)](https://www.tmforum.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
-
-A standalone, high-performance, and deeply scalable Telecom Product Catalogue built for modern BSS/OSS architectures. Decouples pricing, service specification, and catalogue management into a highly deterministic, strictly isolated engine.
-
-[Features](#-key-features) • [Architecture](#-architecture) • [Quick Start](#-quick-start) • [API Specs](#-api-capabilities) • [Contributing](#-contributing)
-
-</div>
-
----
-
-## 🌟 Why This Catalogue?
-
-Modern telecom architectures struggle with tightly coupled CRMs, Billing, and Order Management systems. This engine acts as the **single source of truth** for commercial configuration, exposing it strictly through standard **TM Forum Open APIs (TMF620)**. Any external system can consume your catalogue without needing to understand the complex internal resolution logic.
-
-### 🔥 Key Features
-
-* **🏢 True Multi-Tenancy:** Row-level isolation enforced at the database level via composite foreign keys. Zero cross-tenant data bleed.
-* **⚡ Sub-Millisecond Price Resolution:** Deterministic 4-tier pricing hierarchy (`Subscriber > Account > Market > Base`) computed natively in PostgreSQL using optimized lateral joins.
-* **🔌 TMF620 v5.0.0 Out of the Box:** Strict two-layer architecture ensures internal database complexities never leak into standard external API payloads.
-* **🛡️ Bulletproof Immutability:** Released catalogue versions are locked via database triggers. No accidental in-flight mutations.
-* **♾️ Infinite Hierarchies:** Market and Category trees support infinite depth with recursive CTE cycle-detection built right into the schema.
-* **📜 Dynamic Policy Engine:** Attach complex business eligibility rules using deeply integrated JSON-schema validation (via Ajv).
-* **🧠 Deterministic Resolution Engine:** Isolated micro-resolvers handle timezone-aware policy bounds, priority-based charge stacking, recursive market tax fallbacks, and GL bindings.
-* **🌍 Realistic Integration Fixture:** Includes a comprehensive African/Indian telecom seed dataset with automated assertions for testing complex hierarchy and pricing rules.
-
----
-
-## 🏗️ Architecture
-
-We employ a strict **Two-Layer Architecture**. The internal domain is optimized for complex telecom commercial rules (tax, GL mapping, hierarchical price overrides), while the external layer acts purely as a translation adapter to standard TM Forum JSON.
-
-```mermaid
-graph TD
-    subgraph "External Consumers"
-        CRM[CRM / Salesforce]
-        OM[Order Management]
-        BSS[Billing System]
-    end
-
-    subgraph "TMF620 API Adapter Layer (Translation Only)"
-        TMF[GET /productOfferingPrice]
-    end
-
-    subgraph "Core Catalogue Engine (PostgreSQL + Node.js)"
-        Domain[Internal Domain Model]
-        Resolver[Price & Policy Resolution Engine]
-    end
-
-    CRM -->|TMF620 REST JSON| TMF
-    OM -->|TMF620 REST JSON| TMF
-    BSS -->|TMF620 REST JSON| TMF
-    
-    TMF --> Domain
-    Domain <--> Resolver
+```
+ External CRM / OM / BSS ──TMF620──▶ TMF620 adapter (translation only)
+ Admin console ─────────internal──▶ internal API
+                                        │
+                     services: lifecycle, editing rules, resolution engine
+                                        │
+                     PostgreSQL: tenant-safe FKs, immutability triggers, resolve_price()
 ```
 
----
+## What it does
 
-## 🚀 Quick Start
+- **Catalogue versions**: DRAFT → APPROVED → RELEASED → RETIRED. Content freezes at approval, and database triggers enforce it for every writer. New versions are cloned from the current one. Releasing a version supersedes the previous one without editing it.
+- **Offerings**: product specification, provisioning services, charges, per-market rates, market restrictions, relationships (requires / excludes / upgrade), eligibility policies, categories.
+- **Pricing**: rates per offering, charge and market, falling back up the market tree (a country rate prices its cities). Overrides resolve subscriber › account › market › catalogue and never change the catalogue rate. Charges stack by priority and can be flat or a percentage of the preceding subtotal. Tax and GL codes come per line. Money arithmetic is exact (no floats).
+- **Eligibility**: hierarchy-aware market restrictions (no mapping means allowed; EXCLUDE covers children; INCLUDE carves out) and JSON-Schema-validated policy rules, evaluated in the market's time zone.
+- **TMF620**: `productSpecification`, `productOffering`, `productOfferingPrice`, `catalog`, `category`, with TMF630 paging, `fields` selection and the TMF error shape.
+- **Multi-tenancy**: `tenant_id` on every row and composite foreign keys. With API keys configured, the key decides the tenant and role (admin or read-only).
+- **Two UIs**, served by the API with no build step: an **admin console** (`/admin/`) for the whole lifecycle plus a price simulator, and a **viewer** (`/viewer/`) that behaves like an external CRM and uses only TMF620.
 
-Get the engine running locally in under 60 seconds.
+## Quick start (local PostgreSQL)
 
-### Prerequisites
-* [Docker & Docker Compose](https://www.docker.com/)
-* [Node.js 18+](https://nodejs.org/)
+Requirements: Node.js 20+ and PostgreSQL 14+.
 
-### 1. Clone & Install
 ```bash
-git clone https://github.com/ashish8official/telecom-product-catalogue.git
-cd telecom-product-catalogue
 cd backend
-npm install
+npm ci
 ```
 
-### 2. Launch Database & Migrate
-Spin up the PostgreSQL database and run the enterprise-grade schema migrations (001 through 016).
 ```bash
-# In the project root
-docker-compose up -d
-
-# In the backend directory
-node run_db_tests.js
+cp .env.example .env
 ```
 
-### 3. Load Canonical Seed Data (Optional)
-Run the automated integration fixture to populate the database with realistic M2M and Voice plans, and execute the smoke test assertions.
+Edit `.env` with your database connection, then:
+
 ```bash
-node run_seed_smoke_test.js
+npm run db:migrate
 ```
 
-### 4. Start the Server
 ```bash
-npm run dev
-# Server is now running on http://localhost:3000
+npm run db:seed
 ```
 
----
-
-## 📡 API Capabilities
-
-The engine natively exposes **TMF620 v5.0.0** compliant endpoints. Pass the `x-tenant-id` header to enforce multi-tenancy.
-
-### Fetch a Base Price
 ```bash
-curl -X GET "http://localhost:3000/productCatalogManagement/v5/productOfferingPrice/rate-123" \
-     -H "x-tenant-id: YOUR_TENANT_UUID"
+npm start
 ```
 
-### Fetch a Contextually Resolved Price
-The engine will instantly traverse the override hierarchy (Subscriber -> Account -> Market) and return the exact resolved price for this context.
+Open <http://localhost:3000/admin/> and <http://localhost:3000/viewer/>. The port comes from `PORT` in `.env`; the code default is 8080.
+
+### Existing database created before the migration runner
+
+If the tables already exist but there is no `schema_migrations` table, record what is already applied once, then migrate:
+
 ```bash
-curl -X GET "http://localhost:3000/productCatalogManagement/v5/productOfferingPrice/rate-123?subscriberId=SUB-999&marketId=NYC" \
-     -H "x-tenant-id: YOUR_TENANT_UUID"
+npm run db:baseline -- 016
 ```
 
----
+```bash
+npm run db:migrate
+```
 
-## 📚 Documentation
+Back up first (`pg_dump -Fc`). `npm run db:rollback -- 4` reverts migrations 017–020 if needed.
 
-Dive deeper into the architecture and design decisions:
-- [AGENTS.md](./AGENTS.md) - The foundational rulebook and design constraints.
-- [Domain Model](./docs/domain-model.md) - Internal entity relationship mappings.
-- [Pricing Engine](./docs/pricing-engine.md) - How the deterministic price resolution works.
-- [TMF Alignment](./docs/tmforum-alignment.md) - Mapping internal domains to standard APIs.
-- [Seed Fixture](./docs/seed-fixture.md) - Documentation on the canonical integration testing dataset.
+### Docker
 
----
+```bash
+cp .env.example .env
+```
 
-## 🗺️ Roadmap
+```bash
+docker compose up --build
+```
 
-- [x] Core Catalogue Entities (Specs, Offerings, Versions)
-- [x] Multi-Tenant Composite Integrity
-- [x] Hierarchical Price Override Engine
-- [x] Policy & Market Resolution
-- [x] TMF620 Adapter Layer (Read-Only)
-- [ ] Redis Caching Layer for Price Resolution
-- [ ] TMF620 Full CRUD (POST/PATCH/DELETE)
-- [ ] Admin Frontend Web UI
+```bash
+docker compose exec api npm run db:seed
+```
 
----
+## Using the API
 
-## 🤝 Contributing
+Development mode (no `API_KEYS`) identifies the tenant with a header:
 
-We welcome contributions! Whether it's submitting a bug report, opening a PR, or improving documentation, your help makes this project better for everyone.
+```bash
+curl -H "x-tenant-id: 17000000-0000-4000-a000-000000000000" "http://localhost:3000/productCatalogManagement/v5/productOffering"
+```
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'feat: Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+The price of every charge of M2M Basic in Lagos, for a subscriber with a negotiated price:
 
----
+```bash
+curl -H "x-tenant-id: 17000000-0000-4000-a000-000000000000" "http://localhost:3000/productCatalogManagement/v5/productOfferingPrice?productOffering.id=17000000-0000-4000-a000-000000000012&marketId=17000000-0000-4000-a000-000000000004&subscriberId=SUB-NGA-001"
+```
 
-<div align="center">
-  <b>Built with ❤️ for modern telecom engineering.</b><br>
-  If you find this project useful, please consider giving it a ⭐️!
-</div>
+Full resolution (eligibility, policy, stacking, tax, GL, totals):
+
+```bash
+curl -X POST -H "x-tenant-id: 17000000-0000-4000-a000-000000000000" -H "content-type: application/json" -d '{"offering_id":"17000000-0000-4000-a000-000000000024","market_id":"17000000-0000-4000-a000-000000000004","context":{"account_category":"CORPORATE"}}' http://localhost:3000/api/internal/quote
+```
+
+In production, set `API_KEYS` (see `backend/.env.example`) and send `x-api-key: <key>` instead of the tenant header.
+
+## Commands (in `backend/`)
+
+| Command | What it does |
+|---|---|
+| `npm start` | Run the API and UIs |
+| `npm test` | Unit and API tests (Jest) against the isolated `catalogue_test` database, which is created, migrated and seeded automatically |
+| `npm run test:db` | SQL constraint tests (`database/tests`), each rolled back |
+| `npm run typecheck` | TypeScript check |
+| `npm run db:migrate` / `db:rollback [n]` / `db:status` | Migrations |
+| `npm run db:verify-rollback` | Apply → revert → re-apply every migration on a scratch database |
+| `npm run db:seed` | Load the demo tenants (`docs/seed-fixture.md`) |
+| `npm run smoke -- <url>` | Post-deploy checks against a running server |
+
+## Repository layout
+
+```
+backend/    app.ts, server.ts, config.ts
+            api/tmf620     TMF620 adapter (translation only)
+            api/internal   admin API
+            services/      lifecycle, editing rules, resolution engine
+            repositories/  tenant-scoped SQL
+            domain/        ResolutionContext, exact money arithmetic
+            db/            pool, migration runner
+            tests/         unit + integration (supertest)
+database/   migrations/ (NNN_name.up.sql + .down.sql), tests/, seeds/
+frontend/   catalogue-admin/, catalogue-viewer/, shared/
+docs/       architecture, domain model, constraints, pricing, resolution, markets, policy, TMF alignment, seed
+docker/     Dockerfile
+```
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Domain model](docs/domain-model.md)
+- [Constraints and where they are enforced](docs/constraints.md)
+- [Pricing engine](docs/pricing-engine.md) · [Resolution engine](docs/resolution-engine.md)
+- [Market resolution](docs/market-resolution.md) · [Policy engine](docs/policy-engine.md)
+- [TMF620 alignment](docs/tmforum-alignment.md) · [Seed fixture](docs/seed-fixture.md)
+- [AGENTS.md](AGENTS.md): the architecture rules this code follows
