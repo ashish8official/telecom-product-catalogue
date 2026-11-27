@@ -1,129 +1,245 @@
 -- ==============================================================================
--- TASK 017: Realistic Telecom Seed Data (Africa & India)
--- Uses a fixed Tenant ID for idempotency and testability.
+-- Realistic telecom seed (Africa & India) + a second tenant for isolation demos.
+--
+-- Fixed tenant IDs make the seed idempotent: each run deletes and recreates only these tenants.
+--   17000000-0000-4000-a000-000000000000  "Afrindia Telecom"  (main demo tenant)
+--   27000000-0000-4000-a000-000000000000  "Northwind Mobile"  (second tenant)
+-- Requires migrations up to 020.
 -- ==============================================================================
 
 BEGIN;
 
--- 0. Clean up previous seed data for this tenant
+-- 0. Safety guard + clean-up ---------------------------------------------------------------------
 DO $$
 DECLARE
-    v_db_name TEXT;
-    v_tenant UUID := '17000000-0000-4000-a000-000000000000';
+    v_tenant UUID;
 BEGIN
-    SELECT current_database() INTO v_db_name;
-    -- Explicit safety boundary: Only run in test or local dev databases
-    IF v_db_name NOT IN ('catalogue_db', 'catalogue_test') THEN
-        RAISE EXCEPTION 'SEED SAFETY GUARD: Refusing to run in database % (expected catalogue_db or catalogue_test)', v_db_name;
+    IF current_database() NOT IN ('catalogue_db', 'catalogue_test', 'catalogue_rollback_scratch') THEN
+        RAISE EXCEPTION 'SEED SAFETY GUARD: refusing to seed database % (expected catalogue_db or catalogue_test)', current_database();
     END IF;
 
-    DELETE FROM journal_mapping WHERE tenant_id = v_tenant;
-    DELETE FROM journal_configuration WHERE tenant_id = v_tenant;
-    DELETE FROM tax_mapping WHERE tenant_id = v_tenant;
-    DELETE FROM tax_configuration WHERE tenant_id = v_tenant;
-    DELETE FROM policy_mapping WHERE tenant_id = v_tenant;
-    DELETE FROM policy_rule WHERE tenant_id = v_tenant;
-    DELETE FROM policy_schema WHERE tenant_id = v_tenant;
-    DELETE FROM price_override WHERE tenant_id = v_tenant;
-    DELETE FROM offering_relationship WHERE tenant_id = v_tenant;
-    DELETE FROM offering_market_mapping WHERE tenant_id = v_tenant;
-    DELETE FROM offering_rate WHERE tenant_id = v_tenant;
-    DELETE FROM offering_charge_component WHERE tenant_id = v_tenant;
-    DELETE FROM charge_specification WHERE tenant_id = v_tenant;
-    DELETE FROM product_offering WHERE tenant_id = v_tenant;
-    DELETE FROM product_specification WHERE tenant_id = v_tenant;
-    DELETE FROM catalogue_version WHERE tenant_id = v_tenant;
-    DELETE FROM catalogue WHERE tenant_id = v_tenant;
-    -- Market hierarchy needs careful deletion or just delete all
-    DELETE FROM market_master WHERE tenant_id = v_tenant;
+    FOREACH v_tenant IN ARRAY ARRAY['17000000-0000-4000-a000-000000000000'::uuid, '27000000-0000-4000-a000-000000000000'::uuid]
+    LOOP
+        DELETE FROM price_override WHERE tenant_id = v_tenant;
+        -- Deleting the catalogue cascades through its versions, including RELEASED content
+        -- (the immutability guards allow whole-catalogue removal; see migration 019).
+        DELETE FROM catalogue WHERE tenant_id = v_tenant;
+        DELETE FROM journal_mapping WHERE tenant_id = v_tenant;
+        DELETE FROM journal_configuration WHERE tenant_id = v_tenant;
+        DELETE FROM tax_mapping WHERE tenant_id = v_tenant;
+        DELETE FROM tax_configuration WHERE tenant_id = v_tenant;
+        DELETE FROM policy_rule WHERE tenant_id = v_tenant;
+        DELETE FROM policy_schema WHERE tenant_id = v_tenant;
+        DELETE FROM offering_category WHERE tenant_id = v_tenant AND parent_category_id IS NOT NULL;
+        DELETE FROM offering_category WHERE tenant_id = v_tenant;
+        DELETE FROM charge_specification WHERE tenant_id = v_tenant;
+        DELETE FROM service_specification WHERE tenant_id = v_tenant;
+        DELETE FROM product_specification WHERE tenant_id = v_tenant;
+        UPDATE market_master SET parent_market_id = NULL WHERE tenant_id = v_tenant;
+        DELETE FROM market_master WHERE tenant_id = v_tenant;
+    END LOOP;
 END $$;
 
--- 1. Currencies (Global)
-INSERT INTO currency_master (currency_code, currency_name) VALUES 
-('INR', 'Indian Rupee'),
-('NGN', 'Nigerian Naira'),
-('KES', 'Kenyan Shilling'),
-('ZAR', 'South African Rand')
+-- 1. Currencies (global) ---------------------------------------------------------------------------
+INSERT INTO currency_master (currency_code, currency_name) VALUES
+    ('INR', 'Indian Rupee'),
+    ('NGN', 'Nigerian Naira'),
+    ('KES', 'Kenyan Shilling'),
+    ('ZAR', 'South African Rand'),
+    ('USD', 'US Dollar')
 ON CONFLICT (currency_code) DO NOTHING;
 
--- 2. Markets (Hierarchical)
-INSERT INTO market_master (id, tenant_id, market_code, market_name, timezone, default_currency_code) VALUES
-('17000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000000', 'IND', 'India', 'Asia/Kolkata', 'INR'),
-('17000000-0000-4000-a000-000000000002', '17000000-0000-4000-a000-000000000000', 'AFR', 'Africa', 'Africa/Lagos', 'NGN'),
-('17000000-0000-4000-a000-000000000003', '17000000-0000-4000-a000-000000000000', 'NGA', 'Nigeria', 'Africa/Lagos', 'NGN'),
-('17000000-0000-4000-a000-000000000004', '17000000-0000-4000-a000-000000000000', 'LAGOS', 'Lagos', 'Africa/Lagos', 'NGN'),
-('17000000-0000-4000-a000-000000000005', '17000000-0000-4000-a000-000000000000', 'KEN', 'Kenya', 'Africa/Nairobi', 'KES'),
-('17000000-0000-4000-a000-000000000006', '17000000-0000-4000-a000-000000000000', 'ZAF', 'South Africa', 'Africa/Johannesburg', 'ZAR');
+-- 2. Markets: AFR is a grouping market (no own prices); LAGOS is a city under Nigeria ------------------
+INSERT INTO market_master (id, tenant_id, market_code, market_name, market_type, is_pricing_market, timezone, default_currency_code) VALUES
+    ('17000000-0000-4000-a000-000000000001', '17000000-0000-4000-a000-000000000000', 'IND',   'India',        'COUNTRY', TRUE,  'Asia/Kolkata',        'INR'),
+    ('17000000-0000-4000-a000-000000000002', '17000000-0000-4000-a000-000000000000', 'AFR',   'Africa',       'GROUP',   FALSE, NULL,                  NULL),
+    ('17000000-0000-4000-a000-000000000003', '17000000-0000-4000-a000-000000000000', 'NGA',   'Nigeria',      'COUNTRY', TRUE,  'Africa/Lagos',        'NGN'),
+    ('17000000-0000-4000-a000-000000000004', '17000000-0000-4000-a000-000000000000', 'LAGOS', 'Lagos',        'CITY',    TRUE,  'Africa/Lagos',        'NGN'),
+    ('17000000-0000-4000-a000-000000000005', '17000000-0000-4000-a000-000000000000', 'KEN',   'Kenya',        'COUNTRY', TRUE,  'Africa/Nairobi',      'KES'),
+    ('17000000-0000-4000-a000-000000000006', '17000000-0000-4000-a000-000000000000', 'ZAF',   'South Africa', 'COUNTRY', TRUE,  'Africa/Johannesburg', 'ZAR');
 
--- Update Parent Hierarchy
-UPDATE market_master SET parent_market_id = '17000000-0000-4000-a000-000000000002' WHERE id IN ('17000000-0000-4000-a000-000000000003', '17000000-0000-4000-a000-000000000005', '17000000-0000-4000-a000-000000000006');
-UPDATE market_master SET parent_market_id = '17000000-0000-4000-a000-000000000003' WHERE id = '17000000-0000-4000-a000-000000000004';
+UPDATE market_master SET parent_market_id = '17000000-0000-4000-a000-000000000002'
+ WHERE id IN ('17000000-0000-4000-a000-000000000003', '17000000-0000-4000-a000-000000000005', '17000000-0000-4000-a000-000000000006');
+UPDATE market_master SET parent_market_id = '17000000-0000-4000-a000-000000000003'
+ WHERE id = '17000000-0000-4000-a000-000000000004';
 
--- 3. Catalogue & Versions
-INSERT INTO catalogue (id, tenant_id, name) VALUES ('17000000-0000-4000-a000-000000000007', '17000000-0000-4000-a000-000000000000', 'Global Telecom Catalogue');
+-- 3. Product, service and charge specifications --------------------------------------------------------
+INSERT INTO product_specification (id, tenant_id, spec_code, spec_name) VALUES
+    ('17000000-0000-4000-a000-000000000010', '17000000-0000-4000-a000-000000000000', 'M2M_CONNECTIVITY', 'M2M IoT Connectivity'),
+    ('17000000-0000-4000-a000-000000000011', '17000000-0000-4000-a000-000000000000', 'VOICE_PLANS',      'Consumer Voice Plans');
+
+INSERT INTO service_specification (id, tenant_id, spec_code, spec_name, characteristics) VALUES
+    ('17000000-0000-4000-a000-000000000030', '17000000-0000-4000-a000-000000000000', 'SVC_M2M_DATA',  'M2M Data Bearer', '{"apn": "iot.afrindia", "maxThroughputKbps": 256}'),
+    ('17000000-0000-4000-a000-000000000031', '17000000-0000-4000-a000-000000000000', 'SVC_STATIC_IP', 'Static IPv4 Address', '{"ipVersion": "v4"}'),
+    ('17000000-0000-4000-a000-000000000032', '17000000-0000-4000-a000-000000000000', 'SVC_VOICE',     'Circuit-switched Voice', NULL);
+
+INSERT INTO charge_specification (id, tenant_id, charge_code, charge_name, charge_priority, stacking_rule, calculation_type, charge_type, charge_period) VALUES
+    ('17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000000', 'RC_M2M_MONTHLY', 'M2M Monthly Recurring',  10, 'ADDITIVE', 'FLAT',       'RECURRING', 'MONTH'),
+    ('17000000-0000-4000-a000-000000000028', '17000000-0000-4000-a000-000000000000', 'DISC_LAUNCH',    'Launch Discount',        15, 'ADDITIVE', 'PERCENTAGE', 'RECURRING', 'MONTH'),
+    ('17000000-0000-4000-a000-000000000025', '17000000-0000-4000-a000-000000000000', 'OT_ACTIVATION',  'SIM Activation Fee',     20, 'ADDITIVE', 'FLAT',       'ONE_TIME',  NULL),
+    ('17000000-0000-4000-a000-000000000026', '17000000-0000-4000-a000-000000000000', 'RC_STATIC_IP',   'Static IP Monthly',      10, 'ADDITIVE', 'FLAT',       'RECURRING', 'MONTH'),
+    ('17000000-0000-4000-a000-000000000027', '17000000-0000-4000-a000-000000000000', 'RC_VOICE_30D',   'Voice 30-Day Bundle',    10, 'ADDITIVE', 'FLAT',       'RECURRING', 'MONTH');
+
+-- 4. Catalogue and v1 (built as DRAFT, released at the end) ---------------------------------------------
+INSERT INTO catalogue (id, tenant_id, name, description) VALUES
+    ('17000000-0000-4000-a000-000000000007', '17000000-0000-4000-a000-000000000000', 'Global Telecom Catalogue', 'IoT and consumer plans for Africa and India');
 
 INSERT INTO catalogue_version (id, tenant_id, catalogue_id, version, status, valid_from) VALUES
-('17000000-0000-4000-a000-000000000008', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000007', 'v1', 'RELEASED', NOW() - INTERVAL '30 days'),
-('17000000-0000-4000-a000-000000000009', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000007', 'v2', 'DRAFT', NOW());
+    ('17000000-0000-4000-a000-000000000008', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000007', 'v1', 'DRAFT', NOW() - INTERVAL '30 days');
 
--- 4. Product Specifications
-INSERT INTO product_specification (id, tenant_id, spec_code, spec_name) VALUES
-('17000000-0000-4000-a000-000000000010', '17000000-0000-4000-a000-000000000000', 'M2M_CONNECTIVITY', 'M2M IoT Connectivity'),
-('17000000-0000-4000-a000-000000000011', '17000000-0000-4000-a000-000000000000', 'VOICE_PLANS', 'Consumer Voice Plans');
-
--- 5. Product Offerings
 INSERT INTO product_offering (id, tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type) VALUES
-('17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000008', '17000000-0000-4000-a000-000000000010', 'M2M_BASE', 'M2M Basic Plan', 'BASE', 'POSTPAID'),
-('17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000008', '17000000-0000-4000-a000-000000000010', 'M2M_STATIC_IP', 'Static IP Add-on', 'ADDON', 'POSTPAID'),
-('17000000-0000-4000-a000-000000000014', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000008', '17000000-0000-4000-a000-000000000011', 'VOICE_PREPAID', 'Prepaid Voice 30-Day', 'STANDALONE', 'PREPAID');
+    ('17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000008', '17000000-0000-4000-a000-000000000010', 'M2M_BASE',      'M2M Basic Plan',       'BASE',       'POSTPAID'),
+    ('17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000008', '17000000-0000-4000-a000-000000000010', 'M2M_PREMIUM',   'M2M Premium Plan',     'BASE',       'POSTPAID'),
+    ('17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000008', '17000000-0000-4000-a000-000000000010', 'M2M_STATIC_IP', 'Static IP Add-on',     'ADDON',      'POSTPAID'),
+    ('17000000-0000-4000-a000-000000000014', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000008', '17000000-0000-4000-a000-000000000011', 'VOICE_PREPAID', 'Prepaid Voice 30-Day', 'STANDALONE', 'PREPAID');
 
--- 6. Charges & Rates (Reused across markets)
-INSERT INTO charge_specification (id, tenant_id, charge_code, charge_name, charge_priority, stacking_rule, calculation_type) VALUES
-('17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000000', 'RC_M2M_MONTHLY', 'M2M Monthly Recurring', 10, 'ADDITIVE', 'FLAT');
+INSERT INTO offering_service_component (tenant_id, offering_id, service_spec_id, mandatory_flag, min_qty, max_qty) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000030', TRUE, 1, 1),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000030', TRUE, 1, 1),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000031', TRUE, 1, 4),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000014', '17000000-0000-4000-a000-000000000032', TRUE, 1, 1);
 
-INSERT INTO offering_charge_component (id, tenant_id, offering_id, charge_spec_id) VALUES
-(gen_random_uuid(), '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000015');
+-- M2M_BASE and M2M_PREMIUM share RC_M2M_MONTHLY but are priced independently (migration 017).
+INSERT INTO offering_charge_component (tenant_id, offering_id, charge_spec_id) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000015'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000025'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000015'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000028'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000026'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000014', '17000000-0000-4000-a000-000000000027');
 
-INSERT INTO offering_rate (id, tenant_id, charge_spec_id, market_id, currency_code, amount) VALUES
-('17000000-0000-4000-a000-000000000016', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000001', 'INR', 699.00),
-('17000000-0000-4000-a000-000000000017', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000003', 'NGN', 1299.00),
-('17000000-0000-4000-a000-000000000018', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000005', 'KES', 499.00),
-('17000000-0000-4000-a000-000000000019', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000006', 'ZAR', 299.00);
+-- Rates. Lagos has none of its own and inherits Nigeria's through the market hierarchy.
+INSERT INTO offering_rate (id, tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount) VALUES
+    -- M2M Basic monthly
+    ('17000000-0000-4000-a000-000000000016', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000001', 'INR',  699.00),
+    ('17000000-0000-4000-a000-000000000017', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000003', 'NGN', 1299.00),
+    ('17000000-0000-4000-a000-000000000018', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000005', 'KES',  499.00),
+    ('17000000-0000-4000-a000-000000000019', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000006', 'ZAR',  299.00),
+    -- M2M Basic activation
+    ('17000000-0000-4000-a000-000000000040', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000025', '17000000-0000-4000-a000-000000000001', 'INR',  199.00),
+    ('17000000-0000-4000-a000-000000000041', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000025', '17000000-0000-4000-a000-000000000003', 'NGN',  500.00),
+    ('17000000-0000-4000-a000-000000000042', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000025', '17000000-0000-4000-a000-000000000005', 'KES',  100.00),
+    ('17000000-0000-4000-a000-000000000043', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000025', '17000000-0000-4000-a000-000000000006', 'ZAR',   49.00),
+    -- M2M Premium: same monthly charge, higher price, 10% launch discount in Nigeria
+    ('17000000-0000-4000-a000-000000000044', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000001', 'INR', 1299.00),
+    ('17000000-0000-4000-a000-000000000045', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000003', 'NGN', 2499.00),
+    ('17000000-0000-4000-a000-000000000046', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000028', '17000000-0000-4000-a000-000000000003', 'NGN',  -10.00),
+    ('17000000-0000-4000-a000-000000000047', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000028', '17000000-0000-4000-a000-000000000001', 'INR',    0.00),
+    -- Static IP
+    ('17000000-0000-4000-a000-000000000048', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000026', '17000000-0000-4000-a000-000000000001', 'INR',   99.00),
+    ('17000000-0000-4000-a000-000000000049', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000026', '17000000-0000-4000-a000-000000000003', 'NGN',  350.00),
+    ('17000000-0000-4000-a000-000000000050', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000026', '17000000-0000-4000-a000-000000000005', 'KES',  150.00),
+    -- Voice
+    ('17000000-0000-4000-a000-000000000051', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000014', '17000000-0000-4000-a000-000000000027', '17000000-0000-4000-a000-000000000001', 'INR',  249.00),
+    ('17000000-0000-4000-a000-000000000052', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000014', '17000000-0000-4000-a000-000000000027', '17000000-0000-4000-a000-000000000003', 'NGN', 1000.00),
+    ('17000000-0000-4000-a000-000000000053', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000014', '17000000-0000-4000-a000-000000000027', '17000000-0000-4000-a000-000000000005', 'KES',  300.00),
+    ('17000000-0000-4000-a000-000000000054', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000014', '17000000-0000-4000-a000-000000000027', '17000000-0000-4000-a000-000000000006', 'ZAR',   99.00);
 
--- 7. Market Restrictions (Explicit EXCLUDE)
-INSERT INTO offering_market_mapping (id, tenant_id, offering_id, market_id, restriction) VALUES
-(gen_random_uuid(), '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000006', 'EXCLUDE');
+-- Market restriction: Static IP is not sold in South Africa
+INSERT INTO offering_market_mapping (tenant_id, offering_id, market_id, restriction) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000006', 'EXCLUDE');
 
--- 8. Offering Relationships (REQUIRES)
-INSERT INTO offering_relationship (id, tenant_id, source_offering_id, target_offering_id, relationship_type) VALUES
-(gen_random_uuid(), '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000012', 'REQUIRES');
+-- Relationships
+INSERT INTO offering_relationship (tenant_id, source_offering_id, target_offering_id, relationship_type) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000012', 'REQUIRES'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000024', 'UPGRADE');
 
--- 9. Price Override (SUBSCRIBER scope)
-INSERT INTO price_override (id, tenant_id, offering_rate_id, scope_type, scope_reference_id, override_amount, effective_from) VALUES
-(gen_random_uuid(), '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000017', 'SUBSCRIBER', 'SUB-NGA-001', 999.00, NOW() - INTERVAL '10 days');
-
--- 10. Policy Data
+-- Policy: M2M plans are for corporate accounts
 INSERT INTO policy_schema (id, tenant_id, schema_name, version, schema_json) VALUES
-('17000000-0000-4000-a000-000000000020', '17000000-0000-4000-a000-000000000000', 'B2B_ELIGIBILITY', '1.0', '{"type": "object", "properties": {"account_category": {"type": "string"}}}');
+    ('17000000-0000-4000-a000-000000000020', '17000000-0000-4000-a000-000000000000', 'B2B_ELIGIBILITY', '1.0',
+     '{"type": "object", "properties": {"account_category": {"type": "string", "enum": ["CORPORATE", "SME", "CONSUMER"]}}, "required": ["account_category"], "additionalProperties": false}');
 
 INSERT INTO policy_rule (id, tenant_id, schema_id, rule_json) VALUES
-('17000000-0000-4000-a000-000000000021', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000020', '{"account_category": "CORPORATE"}');
+    ('17000000-0000-4000-a000-000000000021', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000020', '{"account_category": "CORPORATE"}');
 
-INSERT INTO policy_mapping (id, tenant_id, product_offering_id, policy_rule_id) VALUES
-(gen_random_uuid(), '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000021');
+INSERT INTO policy_mapping (tenant_id, product_offering_id, policy_rule_id) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000021'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000021');
 
--- 11. Tax Data (Nigeria VAT)
+-- Categories (presentation only)
+INSERT INTO offering_category (id, tenant_id, name) VALUES
+    ('17000000-0000-4000-a000-000000000060', '17000000-0000-4000-a000-000000000000', 'IoT & M2M'),
+    ('17000000-0000-4000-a000-000000000061', '17000000-0000-4000-a000-000000000000', 'Consumer');
+INSERT INTO offering_category (id, tenant_id, name, parent_category_id) VALUES
+    ('17000000-0000-4000-a000-000000000062', '17000000-0000-4000-a000-000000000000', 'Add-ons', '17000000-0000-4000-a000-000000000060');
+
+INSERT INTO offering_category_mapping (tenant_id, product_offering_id, category_id) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000012', '17000000-0000-4000-a000-000000000060'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000024', '17000000-0000-4000-a000-000000000060'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000013', '17000000-0000-4000-a000-000000000062'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000014', '17000000-0000-4000-a000-000000000061');
+
+-- Tax: one VAT/GST per country; Lagos inherits Nigeria VAT through the hierarchy
 INSERT INTO tax_configuration (id, tenant_id, tax_name, tax_rate, market_master_id) VALUES
-('17000000-0000-4000-a000-000000000022', '17000000-0000-4000-a000-000000000000', 'Nigeria VAT', 7.50, '17000000-0000-4000-a000-000000000003');
+    ('17000000-0000-4000-a000-000000000022', '17000000-0000-4000-a000-000000000000', 'Nigeria VAT',      7.50, '17000000-0000-4000-a000-000000000003'),
+    ('17000000-0000-4000-a000-000000000070', '17000000-0000-4000-a000-000000000000', 'India GST',       18.00, '17000000-0000-4000-a000-000000000001'),
+    ('17000000-0000-4000-a000-000000000071', '17000000-0000-4000-a000-000000000000', 'Kenya VAT',       16.00, '17000000-0000-4000-a000-000000000005'),
+    ('17000000-0000-4000-a000-000000000072', '17000000-0000-4000-a000-000000000000', 'South Africa VAT', 15.00, '17000000-0000-4000-a000-000000000006');
 
-INSERT INTO tax_mapping (id, tenant_id, charge_specification_id, tax_configuration_id) VALUES
-(gen_random_uuid(), '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000022');
+INSERT INTO tax_mapping (tenant_id, charge_specification_id, tax_configuration_id)
+SELECT '17000000-0000-4000-a000-000000000000', c.id, tc.id
+  FROM charge_specification c CROSS JOIN tax_configuration tc
+ WHERE c.tenant_id = '17000000-0000-4000-a000-000000000000' AND tc.tenant_id = c.tenant_id;
 
--- 12. Journal (GL) Data
+-- Journal (GL)
 INSERT INTO journal_configuration (id, tenant_id, gl_code, gl_description) VALUES
-('17000000-0000-4000-a000-000000000023', '17000000-0000-4000-a000-000000000000', '4000-REV-M2M', 'M2M Revenue Account');
+    ('17000000-0000-4000-a000-000000000023', '17000000-0000-4000-a000-000000000000', '4000-REV-M2M',        'M2M Revenue'),
+    ('17000000-0000-4000-a000-000000000073', '17000000-0000-4000-a000-000000000000', '4100-REV-VOICE',      'Voice Revenue'),
+    ('17000000-0000-4000-a000-000000000074', '17000000-0000-4000-a000-000000000000', '4200-REV-ACTIVATION', 'Activation Revenue'),
+    ('17000000-0000-4000-a000-000000000075', '17000000-0000-4000-a000-000000000000', '4900-CONTRA-DISC',    'Discounts (contra revenue)');
 
-INSERT INTO journal_mapping (id, tenant_id, charge_specification_id, journal_configuration_id) VALUES
-(gen_random_uuid(), '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000023');
+INSERT INTO journal_mapping (tenant_id, charge_specification_id, journal_configuration_id) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000023'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000026', '17000000-0000-4000-a000-000000000023'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000027', '17000000-0000-4000-a000-000000000073'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000025', '17000000-0000-4000-a000-000000000074'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000028', '17000000-0000-4000-a000-000000000075');
+
+-- Release v1 through the normal lifecycle (the status trigger enforces DRAFT → APPROVED → RELEASED)
+UPDATE catalogue_version SET status = 'APPROVED' WHERE id = '17000000-0000-4000-a000-000000000008';
+UPDATE catalogue_version SET status = 'RELEASED' WHERE id = '17000000-0000-4000-a000-000000000008';
+
+-- Price overrides on the released v1 Nigeria rate (they never mutate offering_rate)
+INSERT INTO price_override (tenant_id, offering_rate_id, scope_type, scope_reference_id, override_amount, effective_from) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000017', 'SUBSCRIBER', 'SUB-NGA-001', 999.00,  NOW() - INTERVAL '10 days'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000017', 'ACCOUNT',    'ACC-CORP-01', 1150.00, NOW() - INTERVAL '10 days'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000017', 'MARKET',     '17000000-0000-4000-a000-000000000004', 1199.00, NOW() - INTERVAL '10 days');
+
+-- 5. v2: a DRAFT in progress (Basic plan re-priced, a new plan added) -----------------------------------
+INSERT INTO catalogue_version (id, tenant_id, catalogue_id, version, status) VALUES
+    ('17000000-0000-4000-a000-000000000009', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000007', 'v2', 'DRAFT');
+
+INSERT INTO product_offering (id, tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type) VALUES
+    ('17000000-0000-4000-a000-000000000080', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000009', '17000000-0000-4000-a000-000000000010', 'M2M_BASE',      'M2M Basic Plan',     'BASE', 'POSTPAID'),
+    ('17000000-0000-4000-a000-000000000081', '17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000009', '17000000-0000-4000-a000-000000000010', 'M2M_UNLIMITED', 'M2M Unlimited Plan', 'BASE', 'POSTPAID');
+
+INSERT INTO offering_charge_component (tenant_id, offering_id, charge_spec_id) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000080', '17000000-0000-4000-a000-000000000015'),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000081', '17000000-0000-4000-a000-000000000015');
+
+INSERT INTO offering_rate (tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount) VALUES
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000080', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000003', 'NGN', 1399.00),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000080', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000001', 'INR',  749.00),
+    ('17000000-0000-4000-a000-000000000000', '17000000-0000-4000-a000-000000000081', '17000000-0000-4000-a000-000000000015', '17000000-0000-4000-a000-000000000003', 'NGN', 3999.00);
+
+-- 6. Second tenant (proves isolation: shares no rows with the first) -----------------------------------
+INSERT INTO market_master (id, tenant_id, market_code, market_name, market_type, is_pricing_market, timezone, default_currency_code) VALUES
+    ('27000000-0000-4000-a000-000000000001', '27000000-0000-4000-a000-000000000000', 'USA', 'United States', 'COUNTRY', TRUE, 'America/New_York', 'USD');
+INSERT INTO product_specification (id, tenant_id, spec_code, spec_name) VALUES
+    ('27000000-0000-4000-a000-000000000002', '27000000-0000-4000-a000-000000000000', 'MOBILE_POSTPAID', 'Mobile Postpaid');
+INSERT INTO charge_specification (id, tenant_id, charge_code, charge_name, charge_priority, stacking_rule, calculation_type, charge_type, charge_period) VALUES
+    ('27000000-0000-4000-a000-000000000003', '27000000-0000-4000-a000-000000000000', 'RC_MONTHLY', 'Monthly Plan Fee', 10, 'ADDITIVE', 'FLAT', 'RECURRING', 'MONTH');
+INSERT INTO catalogue (id, tenant_id, name) VALUES
+    ('27000000-0000-4000-a000-000000000004', '27000000-0000-4000-a000-000000000000', 'Northwind Consumer Catalogue');
+INSERT INTO catalogue_version (id, tenant_id, catalogue_id, version, status, valid_from) VALUES
+    ('27000000-0000-4000-a000-000000000005', '27000000-0000-4000-a000-000000000000', '27000000-0000-4000-a000-000000000004', '2026.1', 'DRAFT', NOW() - INTERVAL '7 days');
+INSERT INTO product_offering (id, tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type) VALUES
+    ('27000000-0000-4000-a000-000000000006', '27000000-0000-4000-a000-000000000000', '27000000-0000-4000-a000-000000000005', '27000000-0000-4000-a000-000000000002', 'UNLIMITED_5G', 'Unlimited 5G', 'BASE', 'POSTPAID');
+INSERT INTO offering_charge_component (tenant_id, offering_id, charge_spec_id) VALUES
+    ('27000000-0000-4000-a000-000000000000', '27000000-0000-4000-a000-000000000006', '27000000-0000-4000-a000-000000000003');
+INSERT INTO offering_rate (tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount) VALUES
+    ('27000000-0000-4000-a000-000000000000', '27000000-0000-4000-a000-000000000006', '27000000-0000-4000-a000-000000000003', '27000000-0000-4000-a000-000000000001', 'USD', 65.00);
+UPDATE catalogue_version SET status = 'APPROVED' WHERE id = '27000000-0000-4000-a000-000000000005';
+UPDATE catalogue_version SET status = 'RELEASED' WHERE id = '27000000-0000-4000-a000-000000000005';
 
 COMMIT;

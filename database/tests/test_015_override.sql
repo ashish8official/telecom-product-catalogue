@@ -12,6 +12,12 @@ DECLARE
     v_rate_t1 UUID;
     v_rate_t2 UUID;
 
+    v_cat UUID;
+    v_ver UUID;
+    v_spec UUID;
+    v_off_t1 UUID;
+    v_off_t2 UUID;
+
     v_now TIMESTAMPTZ := NOW();
     
     v_result resolved_price_result;
@@ -32,11 +38,26 @@ BEGIN
     INSERT INTO charge_specification (tenant_id, charge_code, charge_name, charge_priority, stacking_rule, calculation_type)
     VALUES (v_tenant_2, 'CHG_2', 'Charge 2', 1, 'ADDITIVE', 'FLAT') RETURNING id INTO v_charge_t2;
 
-    INSERT INTO offering_rate (tenant_id, charge_spec_id, market_id, currency_code, amount)
-    VALUES (v_tenant_1, v_charge_t1, v_market_t1, 'USD', 1299.00) RETURNING id INTO v_rate_t1;
+    -- Rates belong to an offering that carries the charge (migration 017)
+    INSERT INTO catalogue (tenant_id, name) VALUES (v_tenant_1, 'Override Cat 1') RETURNING id INTO v_cat;
+    INSERT INTO catalogue_version (tenant_id, catalogue_id, version) VALUES (v_tenant_1, v_cat, 'v1') RETURNING id INTO v_ver;
+    INSERT INTO product_specification (tenant_id, spec_code, spec_name) VALUES (v_tenant_1, 'OVR_SPEC', 'Override Spec') RETURNING id INTO v_spec;
+    INSERT INTO product_offering (tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
+    VALUES (v_tenant_1, v_ver, v_spec, 'OVR_OFF', 'Override Off', 'BASE', 'PREPAID') RETURNING id INTO v_off_t1;
+    INSERT INTO offering_charge_component (tenant_id, offering_id, charge_spec_id) VALUES (v_tenant_1, v_off_t1, v_charge_t1);
 
-    INSERT INTO offering_rate (tenant_id, charge_spec_id, market_id, currency_code, amount)
-    VALUES (v_tenant_2, v_charge_t2, v_market_t2, 'USD', 500.00) RETURNING id INTO v_rate_t2;
+    INSERT INTO catalogue (tenant_id, name) VALUES (v_tenant_2, 'Override Cat 2') RETURNING id INTO v_cat;
+    INSERT INTO catalogue_version (tenant_id, catalogue_id, version) VALUES (v_tenant_2, v_cat, 'v1') RETURNING id INTO v_ver;
+    INSERT INTO product_specification (tenant_id, spec_code, spec_name) VALUES (v_tenant_2, 'OVR_SPEC', 'Override Spec') RETURNING id INTO v_spec;
+    INSERT INTO product_offering (tenant_id, catalogue_version_id, product_specification_id, offering_code, offering_name, offering_type, service_type)
+    VALUES (v_tenant_2, v_ver, v_spec, 'OVR_OFF', 'Override Off', 'BASE', 'PREPAID') RETURNING id INTO v_off_t2;
+    INSERT INTO offering_charge_component (tenant_id, offering_id, charge_spec_id) VALUES (v_tenant_2, v_off_t2, v_charge_t2);
+
+    INSERT INTO offering_rate (tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount)
+    VALUES (v_tenant_1, v_off_t1, v_charge_t1, v_market_t1, 'USD', 1299.00) RETURNING id INTO v_rate_t1;
+
+    INSERT INTO offering_rate (tenant_id, offering_id, charge_spec_id, market_id, currency_code, amount)
+    VALUES (v_tenant_2, v_off_t2, v_charge_t2, v_market_t2, 'USD', 500.00) RETURNING id INTO v_rate_t2;
 
     -- TEST I: Price override does not mutate offering_rate
     -- 1. Create price_override amount = 999

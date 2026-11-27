@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import type { Db } from '../db/pool';
 import { ResolutionContext } from '../domain/ResolutionContext';
 
 export interface PolicyResult {
@@ -8,7 +8,7 @@ export interface PolicyResult {
 }
 
 export async function resolve_policy(
-    pool: Pool,
+    pool: Db,
     context: ResolutionContext,
     mode: 'ALL' | 'ANY' = 'ALL'
 ): Promise<PolicyResult> {
@@ -18,7 +18,7 @@ export async function resolve_policy(
     const query = `
         SELECT pr.id, pr.rule_json 
         FROM policy_mapping pm
-        JOIN policy_rule pr ON pm.policy_rule_id = pr.id
+        JOIN policy_rule pr ON pr.tenant_id = pm.tenant_id AND pr.id = pm.policy_rule_id
         WHERE pm.tenant_id = $1 AND pm.product_offering_id = $2
         ORDER BY pr.id ASC
     `;
